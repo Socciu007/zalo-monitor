@@ -23,6 +23,8 @@ test("normalizeCapture không sửa nội dung (giữ newline, emoji, @tag)", ()
   const raw = "dòng 1\ndòng 2 🚢 @bot ơi";
   const payload = normalizeCapture({ rawBody: raw, chatId: "1", groupName: "", senderId: "2", senderName: "" });
   assert.equal(payload.content, raw);
+  assert.equal(payload.groupName, "");
+  assert.equal(payload.senderName, "");
 });
 
 test("normalizeCapture dùng chuỗi rỗng cho groupName/senderName thiếu", () => {
@@ -36,4 +38,8 @@ test("normalizeCapture cho phép override platform, mặc định là zalo", () 
   assert.equal(payload.platform, "zalo-fork");
   assert.equal(payload.groupName, "");
   assert.equal(payload.senderName, "");
+});
+
+test("normalizeCapture giữ platform rỗng (?? khác ||)", () => {
+  assert.equal(normalizeCapture({ rawBody: "x", chatId: "1", senderId: "2", platform: "" }).platform, "");
 });
