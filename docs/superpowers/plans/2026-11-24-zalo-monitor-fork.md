@@ -688,8 +688,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+/** setTimeout/AbortSignal.timeout tràn quá 2^31-1 ms sẽ fire sau ~1ms → timeout dài biến thành timeout tức thì. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 export async function postCaptureToBackend(config: EbClientConfig, payload: BackendPayload): Promise<PostOutcome> {
   const attempts = Math.max(1, config.maxAttempts);
+  const timeoutMs = Math.min(Math.max(1, config.timeoutMs), MAX_TIMEOUT_MS);
   let lastError = "post_failed_unknown";
   let lastStatus: number | null = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -698,7 +702,7 @@ export async function postCaptureToBackend(config: EbClientConfig, payload: Back
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(config.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       lastStatus = response.status;
       if (response.status >= 200 && response.status < 300) {
