@@ -18,12 +18,6 @@ const manifestPath = path.join(repoRoot, "openclaw.plugin.json");
 const ANCHOR = "\tif (isGroup && requireMention && !canDetectMention && !mentionDecision.effectiveWasMentioned) {";
 const IMPORT_LINE = 'import { captureZaloMessage } from "../capture.js";';
 
-// .gitignore ở root có pattern `dist/` (không có leading slash) nên nó cũng khớp
-// vendor/zalouser/dist/ và làm git bỏ qua toàn bộ bản vendored. .gitignore ở thư mục
-// sâu hơn được ưu tiên, nên ta tự un-ignore tại chỗ. File này phải do script sinh ra
-// vì vendor/ được xoá và tạo lại mỗi lần refresh.
-const VENDOR_GITIGNORE = "!dist/\n";
-
 const TAP_CALL = [
   "\tcaptureZaloMessage({",
   "\t\tisGroup,",
@@ -120,7 +114,6 @@ async function main() {
     await cp(path.join(sourceDir, "openclaw.plugin.json"), path.join(staged, "openclaw.plugin.json"));
     await cp(path.join(sourceDir, "package.json"), path.join(staged, "package.json"));
     await stripOpenclawKey(path.join(staged, "package.json"));
-    await writeFile(path.join(staged, ".gitignore"), VENDOR_GITIGNORE, "utf8");
 
     const previous = `${vendorRoot}.previous`;
     await rm(previous, { recursive: true, force: true });
