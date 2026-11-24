@@ -47,6 +47,7 @@
 | `src/*.test.ts` | unit test (chạy trên JS đã build) |
 | `vendor/zalouser/**` | bản `@openclaw/zalouser` đã patch, commit vào repo |
 | `scripts/vendor-refresh.mjs` | copy bản npm mới từ `node_modules` → patch → swap vào `vendor/zalo-monitor` |
+| `scripts/clean-dist.mjs` | xoá `dist/` trước khi build (tsc không tự dọn) |
 | `scripts/copy-vendor.mjs` | copy `vendor/zalouser/dist` → `dist/zalouser` (build) |
 
 ---
@@ -69,13 +70,15 @@
   "type": "module",
   "description": "OpenClaw Zalo Personal fork that captures every Zalo group message (including untagged ones) and forwards it verbatim to a backend.",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
-    "test": "npm run build && node --test dist/",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:refresh": "node scripts/vendor-refresh.mjs"
   },
   "dependencies": {
-    "zca-js": "2.1.2"
+    "zca-js": "2.1.2",
+    "typebox": "1.1.38",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@openclaw/zalouser": "2026.5.28",
@@ -123,11 +126,25 @@
         "groupModel": "hybrid",
         "groupAllowFromFallbackToAllowFrom": false,
         "warnOnEmptyGroupSenderAllowlist": false
-      }
+      },
+      "preferOver": [
+        "zalouser"
+      ]
     }
   }
 }
 ```
+
+> **Ghi chú (sửa sau code review Task 1):**
+> - `typebox` + `zod` là dependency **bắt buộc**: code vendor import tĩnh chúng
+>   (`dist/shared-*.js` → `zod`, `dist/api-*.js` → `typebox`). Vendor copy không mang
+>   `node_modules` theo → phải khai báo ở package của ta, đúng version upstream.
+> - `node --test dist/` **hỏng** trên Node 22 (Node thử `require()` chính thư mục →
+>   `MODULE_NOT_FOUND`). Phải dùng glob `node --test "dist/**/*.test.js"`. Glob cũng an toàn
+>   hơn: `dist/` sẽ chứa ~20 file vendor, tuyệt đối không được chạy như test.
+> - `openclaw.channel.preferOver: ["zalouser"]` khai báo quyền ưu tiên của plugin id
+>   `zalo-monitor` so với plugin npm `zalouser` ngay từ Task 1 (manifest Task 10 vẫn là
+>   nguồn ưu tiên chính: `existing.preferOver ?? packageChannel.preferOver`).
 
 - [ ] **Step 2: Tạo `tsconfig.json`**
 
@@ -1348,17 +1365,9 @@ async function main() {
 
   const staged = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-vendor-"));
   try {
-    await mkdir(path.join(staged, "dist"), { recursive: true });
-    for (const entry of entries) {
-      const from = path.join(sourceDist, entry);
-      const to = path.join(staged, "dist", entry);
-      if (entry === monitorFile) {
-        const patched = patchMonitorSource(await readFile(from, "utf8"));
-        await writeFile(to, patched, "utf8");
-      } else {
-        await cp(from, to);
-      }
-    }
+    await cp(sourceDist, path.join(staged, "dist"), { recursive: true });
+    const patched = patchMonitorSource(await readFile(path.join(staged, "dist", monitorFile), "utf8"));
+    await writeFile(path.join(staged, "dist", monitorFile), patched, "utf8");
     await cp(path.join(sourceDir, "openclaw.plugin.json"), path.join(staged, "openclaw.plugin.json"));
     await cp(path.join(sourceDir, "package.json"), path.join(staged, "package.json"));
 
@@ -1410,17 +1419,35 @@ git commit -m "feat(vendor): vendor patched zalouser channel with capture tap"
 
 ---
 
-### Task 10: `scripts/copy-vendor.mjs` + `openclaw.plugin.json`
+### Task 10: `scripts/copy-vendor.mjs` + `scripts/clean-dist.mjs` + `openclaw.plugin.json`
 
 **Files:**
+- Create: `scripts/clean-dist.mjs`
 - Create: `scripts/copy-vendor.mjs`
 - Create: `openclaw.plugin.json`
 
-- [ ] **Step 1: Viết `scripts/copy-vendor.mjs`**
+- [ ] **Step 1: Viết `scripts/clean-dist.mjs`**
+
+```js
+// scripts/clean-dist.mjs
+import { rm } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+await rm(path.join(repoRoot, "dist"), { recursive: true, force: true });
+console.log("[clean-dist] đã xoá dist/");
+```
+
+> `tsc` không tự dọn `dist/`, nên output cũ của file đã đổi tên/xoá có thể sót lại và bị
+> entry discovery quét nhầm. `clean-dist` chạy **trước** `tsc`; `copy-vendor` chạy **sau**
+> `tsc` (nếu đảo thứ tự thì copy sẽ xoá luôn output của compiler).
+
+- [ ] **Step 2: Viết `scripts/copy-vendor.mjs`**
 
 ```js
 // scripts/copy-vendor.mjs
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1428,16 +1455,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const vendorDist = path.join(repoRoot, "vendor", "zalouser", "dist");
 const outDir = path.join(repoRoot, "dist", "zalouser");
 
-const entries = (await readdir(vendorDist)).filter((entry) => entry.endsWith(".js"));
-await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
-for (const entry of entries) {
-  await cp(path.join(vendorDist, entry), path.join(outDir, entry));
-}
-console.log(`[copy-vendor] đã copy ${entries.length} file vendor → dist/zalouser`);
+await cp(vendorDist, outDir, { recursive: true });
+const copied = (await readdir(outDir)).length;
+console.log(`[copy-vendor] đã copy vendor → dist/zalouser (${copied} entry cấp cao nhất)`);
 ```
 
-- [ ] **Step 2: Tạo `openclaw.plugin.json`**
+- [ ] **Step 3: Tạo `openclaw.plugin.json`**
 
 ```json
 {
@@ -1516,7 +1540,7 @@ console.log(`[copy-vendor] đã copy ${entries.length} file vendor → dist/zalo
 
 > `channelConfigs.zalouser.schema` ở trên là placeholder rỗng; `vendor-refresh.mjs` (Task 9) sẽ điền schema thật của channel `zalouser`. Sau Task 9 phải chạy lại `node scripts/vendor-refresh.mjs` để schema được đồng bộ.
 
-- [ ] **Step 3: Đồng bộ schema channel từ bản vendor**
+- [ ] **Step 4: Đồng bộ schema channel từ bản vendor**
 
 Run: `node scripts/vendor-refresh.mjs`
 Expected: in `đã đồng bộ channelConfigs.zalouser.schema`.
@@ -1524,15 +1548,15 @@ Expected: in `đã đồng bộ channelConfigs.zalouser.schema`.
 Run: `node -e "const m=require('./openclaw.plugin.json'); console.log(Object.keys(m.channelConfigs.zalouser.schema.properties||{}).join(','))"`
 Expected: in ra danh sách property của channel zalouser (ví dụ `name,enabled,markdown,profile,dmPolicy,allowFrom,historyLimit,groupAllowFrom,groupPolicy,groups`).
 
-- [ ] **Step 4: Build thử**
+- [ ] **Step 5: Build thử**
 
 Run: `npm run build`
 Expected: `tsc` không lỗi; `[copy-vendor] đã copy N file vendor → dist/zalouser`; `dist/index.js`, `dist/zalouser/monitor-*.js` tồn tại.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/copy-vendor.mjs openclaw.plugin.json
+git add scripts/clean-dist.mjs scripts/copy-vendor.mjs openclaw.plugin.json
 git commit -m "feat(manifest): add zalo-monitor manifest and vendor copy step"
 ```
 
@@ -1880,4 +1904,11 @@ git commit -m "docs: document fork install, config, state and upgrade flow"
 
 **Type consistency** — `BackendPayload` (normalize.ts) dùng bởi queue.ts, eb-client.ts ✓; `PendingRecord extends BackendPayload` ✓; `CaptureSettings` (config.ts) dùng bởi capture.ts, runtime.ts ✓; `EbClientConfig` (eb-client.ts) dùng bởi flush.ts ✓ — `CaptureSettings` có `captureDm`/`flushIntervalMs` **thừa** so với `EbClientConfig` nhưng cấu trúc tương thích (structural typing) nên truyền `settings` vào `flushPending(stateDir, settings)` hợp lệ ✓. `captureZaloMessage` nhận `rootConfig` — Task 9 truyền `rootConfig: config` ✓ khớp tên field. `getLastCaptureSettings()` (capture.ts) được runtime.ts dùng ✓.
 
-**Thứ tự build** — `npm run build` = `tsc` (src → dist) **rồi** `copy-vendor.mjs` (vendor/zalouser/dist → dist/zalouser). File monitor đã patch import `"../capture.js"` → resolve thành `dist/capture.js` ✓ (cùng nằm trong `dist/`, thoả boundary root của `defineBundledChannelEntry`).
+**Thứ tự build** — `npm run build` = `clean-dist.mjs` (xoá `dist/`) → `tsc` (src → dist) → `copy-vendor.mjs` (vendor/zalouser/dist → dist/zalouser). File monitor đã patch import `"../capture.js"` → resolve thành `dist/capture.js` ✓ (cùng nằm trong `dist/`, thoả boundary root của `defineBundledChannelEntry`).
+
+**Sửa đổi sau code review Task 1** (đã áp dụng vào plan này):
+1. `dependencies` thêm `typebox@1.1.38` + `zod@4.4.3` — code vendor import tĩnh chúng, vendor copy không mang `node_modules` theo.
+2. `test` script: `node --test dist/` → `node --test "dist/**/*.test.js"` (bản thư mục hỏng trên Node 22; glob cũng loại trừ file vendor).
+3. `openclaw.channel` thêm `preferOver: ["zalouser"]` — khai báo quyền ưu tiên ngay từ Task 1.
+4. Task 9/10 copy vendor **đệ quy** thay vì chỉ copy file `.js` cấp cao nhất.
+5. Task 10 thêm `scripts/clean-dist.mjs` chạy trước `tsc`.
