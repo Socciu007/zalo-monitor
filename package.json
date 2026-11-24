@@ -5,7 +5,7 @@
   "type": "module",
   "description": "OpenClaw Zalo Personal fork that captures every Zalo group message (including untagged ones) and forwards it verbatim to a backend.",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
     "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:refresh": "node scripts/vendor-refresh.mjs"
