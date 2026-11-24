@@ -81,7 +81,7 @@ Tap chỉ chạy khi `isGroup === true`. Tin DM không capture.
 
 | Field | Nguồn | Gửi backend? |
 |---|---|---|
-| `content` | `rawBody` (text gốc, nguyên văn) | ✅ |
+| `content` | `message.content` — **chưa trim**. Upstream `monitor-*.js:151` đã làm `const rawBody = message.content?.trim()` nên `rawBody` **đã mất** khoảng trắng đầu/cuối; bản nguyên văn là `message.content` (từ zca-js `normalizeMessageContent(data.content)`, không trim) | ✅ |
 | `groupId` | `chatId` | ✅ |
 | `groupName` | `groupName` (đã resolve, có thể gọi API lấy tên group) | ✅ |
 | `userId` | `senderId` | ✅ |
@@ -108,7 +108,7 @@ Tap chỉ chạy khi `isGroup === true`. Tin DM không capture.
   ```js
   import { captureZaloMessage } from "<đường dẫn tương đối tới dist/capture.js của repo>";
   // …
-  captureZaloMessage({ message, isGroup, chatId, groupName, senderId, senderName, rawBody, mentioned, config, log });
+  captureZaloMessage({ message, isGroup, chatId, groupName, senderId, senderName, rawBody: message.content, mentioned, config, log });
   ```
 
   Đường dẫn tương đối được tính lúc implement (từ `vendor/zalouser/dist/` tới `<repo>/dist/capture.js`)

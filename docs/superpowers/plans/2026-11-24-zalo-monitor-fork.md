@@ -1332,7 +1332,7 @@ const TAP_CALL = [
   "\t\tgroupName,",
   "\t\tsenderId,",
   "\t\tsenderName,",
-  "\t\trawBody,",
+  "\t\trawBody: message.content,",
   "\t\tmentioned: mentionDecision.effectiveWasMentioned,",
   "\t\tmessageId: resolveZalouserMessageSid({ msgId: message.msgId, cliMsgId: message.cliMsgId, fallback: String(message.timestampMs) }),",
   "\t\trootConfig: config",
