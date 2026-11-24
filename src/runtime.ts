@@ -6,15 +6,21 @@ import { resolvePluginStateDir } from "./state.js";
 
 const logger = createSubsystemLogger("zalo-monitor");
 
+let started = false;
 let timer: NodeJS.Timeout | null = null;
 
 /**
  * Timer flush + replay khi khởi động.
  * Settings lấy từ `getLastCaptureSettings()` — tức là settings resolve gần nhất
  * từ root config (qua tap). Trước khi có tin nào, dùng default.
+ *
+ * Timer tự hẹn lại sau mỗi lần chạy (thay vì setInterval cố định) để
+ * `flushIntervalMs` do user cấu hình có hiệu lực ngay khi có tin đầu tiên —
+ * lúc đó `lastSettings` mới được cập nhật.
  */
 export function startCaptureRuntime(): void {
-  if (timer) return;
+  if (started) return;
+  started = true;
   const stateDir = resolvePluginStateDir();
   void (async () => {
     try {
@@ -27,10 +33,17 @@ export function startCaptureRuntime(): void {
       logger.error("capture_replay_failed", { error: err instanceof Error ? err.message : String(err) });
     }
   })();
-  timer = setInterval(() => {
-    void flushPending(stateDir, getLastCaptureSettings()).catch((err) => {
-      logger.error("capture_flush_failed", { error: err instanceof Error ? err.message : String(err) });
-    });
-  }, getLastCaptureSettings().flushIntervalMs);
-  timer.unref?.();
+  const scheduleNext = () => {
+    timer = setTimeout(() => {
+      void flushPending(stateDir, getLastCaptureSettings())
+        .catch((err) => {
+          logger.error("capture_flush_failed", { error: err instanceof Error ? err.message : String(err) });
+        })
+        .finally(() => {
+          scheduleNext();
+        });
+    }, getLastCaptureSettings().flushIntervalMs);
+    timer.unref?.();
+  };
+  scheduleNext();
 }
