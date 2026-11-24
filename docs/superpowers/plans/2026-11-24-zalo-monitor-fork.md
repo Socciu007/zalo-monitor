@@ -258,7 +258,7 @@ Expected: FAIL — `Cannot find module './state.js'`.
 
 ```ts
 // src/state.ts
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 
@@ -295,9 +295,9 @@ export async function writeJsonAtomic(filePath: string, value: unknown): Promise
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
     await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    await rename(tmp, filePath);
+    await renameWithRetry(tmp, filePath);
   } catch (err) {
-    await import("node:fs/promises").then((fs) => fs.rm(tmp, { force: true }));
+    await rm(tmp, { force: true });
     throw err;
   }
 }
@@ -311,7 +311,41 @@ export async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
     return null;
   }
 }
+
+const RENAME_MAX_ATTEMPTS = 5;
+const RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
+/** Windows hay trả EPERM khi target đang bị tranh chấp — thử lại vài lần rồi mới bỏ. */
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < RENAME_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") throw err;
+      lastError = err;
+      const delay = RENAME_RETRY_DELAYS_MS[attempt] ?? RENAME_RETRY_DELAYS_MS[RENAME_RETRY_DELAYS_MS.length - 1] ?? 100;
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 ```
+
+> **Sửa sau code review Task 2:** `rename` phải retry `EPERM`/`EBUSY`/`EACCES` — đo thật trên
+> Windows: 8 writer đồng thời cùng target → **4 fail `EPERM`**; 8 writer khác target → 8/8 OK.
+> `checkpoint.json` / `status.json` là singleton read-modify-write nên sẽ chập chờn nếu không retry.
+> Lỗi không tạm thời (`ENOTEMPTY`, `ENOENT`…) phải ném ngay, không retry.
+> Test phải **chốt tên thư mục literal** (`pending/`, `pending/rejected/`) — test cũ dùng resolver
+> cho cả lúc tạo lẫi lúc assert nên đổi tên resolver vẫn xanh.
+> Phải có test cho **error path**: rename fail (target là thư mục non-empty) → error ném ra và
+> **không còn file `.tmp-`**.
 
 - [ ] **Step 4: Chạy test để thấy pass**
 
@@ -885,7 +919,12 @@ export async function listPendingRecords(stateDir: string): Promise<PendingRecor
 }
 
 export async function readCheckpoint(stateDir: string): Promise<Checkpoint> {
-  return (await readJsonIfExists<Checkpoint>(resolveCheckpointPath(stateDir))) ?? {};
+  const raw = await readJsonIfExists<unknown>(resolveCheckpointPath(stateDir));
+  // JSON hợp lệ nhưng sai shape (mảng, chuỗi…) → coi như chưa có checkpoint.
+  // Nếu không, markCheckpoint sẽ gắn key lên mảng và JSON.stringify sẽ **drop** mọi entry
+  // → gửi trùng tin đã nhận.
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return raw as Checkpoint;
 }
 
 export async function isCaptured(stateDir: string, groupId: string, messageId: string): Promise<boolean> {
@@ -914,17 +953,17 @@ export async function countRejected(stateDir: string): Promise<number> {
 }
 
 export async function readStatus(stateDir: string): Promise<CaptureStatus> {
-  const stored = await readJsonIfExists<CaptureStatus>(resolveStatusPath(stateDir));
-  return (
-    stored ?? {
-      pending: 0,
-      rejected: 0,
-      lastPostAt: null,
-      lastPostStatus: null,
-      lastError: null,
-      updatedAt: new Date().toISOString(),
-    }
-  );
+  const stored = await readJsonIfExists<unknown>(resolveStatusPath(stateDir));
+  const fallback: CaptureStatus = {
+    pending: 0,
+    rejected: 0,
+    lastPostAt: null,
+    lastPostStatus: null,
+    lastError: null,
+    updatedAt: new Date().toISOString(),
+  };
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return fallback;
+  return { ...fallback, ...(stored as Partial<CaptureStatus>) };
 }
 
 export async function updateStatus(stateDir: string, patch: Partial<CaptureStatus>): Promise<void> {
