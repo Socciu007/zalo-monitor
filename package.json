@@ -1,0 +1,65 @@
+{
+  "name": "zalo-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw Zalo Personal fork that captures every Zalo group message (including untagged ones) and forwards it verbatim to a backend.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
+    "test": "npm run build && node --test dist/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "vendor:refresh": "node scripts/vendor-refresh.mjs"
+  },
+  "dependencies": {
+    "zca-js": "2.1.2"
+  },
+  "devDependencies": {
+    "@openclaw/zalouser": "2026.5.28",
+    "@types/node": "22.18.1",
+    "openclaw": "2026.5.28",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.28"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "runtimeExtensions": [
+      "./dist/index.js"
+    ],
+    "setupEntry": "./src/setup-entry.ts",
+    "runtimeSetupEntry": "./dist/setup-entry.js",
+    "compat": {
+      "pluginApi": ">=2026.5.28"
+    },
+    "build": {
+      "openclawVersion": "2026.5.28"
+    },
+    "channel": {
+      "id": "zalouser",
+      "label": "Zalo Personal",
+      "selectionLabel": "Zalo (Personal Account)",
+      "docsPath": "/channels/zalouser",
+      "docsLabel": "zalouser",
+      "blurb": "Zalo personal account via QR code login.",
+      "aliases": [
+        "zlu"
+      ],
+      "order": 85,
+      "quickstartAllowFrom": false,
+      "doctorCapabilities": {
+        "dmAllowFromMode": "topOnly",
+        "groupModel": "hybrid",
+        "groupAllowFromFallbackToAllowFrom": false,
+        "warnOnEmptyGroupSenderAllowlist": false
+      }
+    }
+  }
+}
