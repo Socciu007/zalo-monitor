@@ -6,12 +6,14 @@
   "description": "OpenClaw Zalo Personal fork that captures every Zalo group message (including untagged ones) and forwards it verbatim to a backend.",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
-    "test": "npm run build && node --test dist/",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:refresh": "node scripts/vendor-refresh.mjs"
   },
   "dependencies": {
-    "zca-js": "2.1.2"
+    "zca-js": "2.1.2",
+    "typebox": "1.1.38",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@openclaw/zalouser": "2026.5.28",
@@ -59,7 +61,10 @@
         "groupModel": "hybrid",
         "groupAllowFromFallbackToAllowFrom": false,
         "warnOnEmptyGroupSenderAllowlist": false
-      }
+      },
+      "preferOver": [
+        "zalouser"
+      ]
     }
   }
 }
