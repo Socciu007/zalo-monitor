@@ -91,7 +91,7 @@ e:\projectVN\zalo-monitor\
 │  ├─ copy-vendor.mjs        # build step: vendor/zalouser/dist → dist/zalouser
 │  ├─ clean-dist.mjs         # build step: xoá dist/ trước khi tsc
 │  └─ link-host-sdk.mjs      # trỏ node_modules/openclaw về bản cài openclaw của host
-├─ vendor\zalouser\          # vendored, đã patch @openclaw/zalouser 2026.5.28 (23 file tracked)
+├─ vendor\zalouser\          # vendored, đã patch @openclaw/zalouser 2026.6.6 (23 file tracked)
 ├─ dist\                     # output của `npm run build` (entry plugin nạp từ đây)
 └─ docs\superpowers\         # design spec + implementation plan
 ```

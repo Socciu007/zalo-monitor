@@ -19,7 +19,7 @@ import { createDangerousNameMatchingMutableAllowlistWarningCollector } from "ope
 //#region extensions/zalouser/src/accounts.ts
 let zalouserAccountsRuntimePromise;
 async function loadZalouserAccountsRuntime() {
-	zalouserAccountsRuntimePromise ??= import("./accounts.runtime-UypUaEfF.js");
+	zalouserAccountsRuntimePromise ??= import("./accounts.runtime-BOwtZOBd.js");
 	return await zalouserAccountsRuntimePromise;
 }
 const { listAccountIds: listZalouserAccountIds, resolveDefaultAccountId: resolveDefaultZalouserAccountId } = createAccountListHelpers("zalouser", { implicitDefaultAccount: {

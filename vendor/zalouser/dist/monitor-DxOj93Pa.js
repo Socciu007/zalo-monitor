@@ -1,6 +1,6 @@
-import { a as formatZalouserMessageSidFull, c as findZalouserGroupEntry, l as isZalouserGroupEntryAllowed, o as resolveZalouserMessageSid, r as getZalouserRuntime, s as buildZalouserGroupCandidates } from "./channel-BYQ2rvLF.js";
-import { o as listZaloGroups, r as listZaloFriends, u as resolveZaloGroupContext, v as startZaloListener } from "./zalo-js-Cblh09JJ.js";
-import { i as sendMessageZalouser, o as sendSeenZalouser, s as sendTypingZalouser, t as sendDeliveredZalouser } from "./send-C04FGz0_.js";
+import { a as formatZalouserMessageSidFull, c as findZalouserGroupEntry, l as isZalouserGroupEntryAllowed, o as resolveZalouserMessageSid, r as getZalouserRuntime, s as buildZalouserGroupCandidates } from "./channel-BFn5MZCm.js";
+import { o as listZaloGroups, r as listZaloFriends, u as resolveZaloGroupContext, v as startZaloListener } from "./zalo-js-C2Eq5K4i.js";
+import { i as sendMessageZalouser, o as sendSeenZalouser, s as sendTypingZalouser, t as sendDeliveredZalouser } from "./send-_7W21n-G.js";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { normalizeLowercaseStringOrEmpty, normalizeOptionalLowercaseString, normalizeStringEntries } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { mergeAllowlist, summarizeMapping } from "openclaw/plugin-sdk/allow-from";
@@ -568,7 +568,8 @@ async function deliverZalouserReply(params) {
 	return { visibleReplySent };
 }
 async function monitorZalouserProvider(options) {
-	let { account, config } = options;
+	const { config } = options;
+	let { account } = options;
 	const { abortSignal, statusSink, runtime } = options;
 	const core = getZalouserRuntime();
 	const inboundQueue = new KeyedAsyncQueue();

@@ -1,4 +1,4 @@
-import { S as TextStyle, _ as sendZaloTypingEvent, f as sendZaloDeliveredEvent, g as sendZaloTextMessage, h as sendZaloSeenEvent, m as sendZaloReaction, p as sendZaloLink, x as createZalouserSendReceipt } from "./zalo-js-Cblh09JJ.js";
+import { S as TextStyle, _ as sendZaloTypingEvent, f as sendZaloDeliveredEvent, g as sendZaloTextMessage, h as sendZaloSeenEvent, m as sendZaloReaction, p as sendZaloLink, x as createZalouserSendReceipt } from "./zalo-js-C2Eq5K4i.js";
 //#region extensions/zalouser/src/text-styles.ts
 const ESCAPE_SENTINEL_START = "";
 const ESCAPE_SENTINEL_END = "";
@@ -80,7 +80,7 @@ function parseZalouserTextStyles(input) {
 			processedLines.push(escapeLiteralText(normalizeCodeBlockLeadingWhitespace(stripCodeFenceIndent(codeLine, activeFence.indent)), escapeMap));
 			continue;
 		}
-		let line = unquotedLine;
+		const line = unquotedLine;
 		const openingFence = resolveOpeningFence(rawLine);
 		if (openingFence) {
 			const fenceLine = openingFence.quoteIndent > 0 ? unquotedLine : rawLine;

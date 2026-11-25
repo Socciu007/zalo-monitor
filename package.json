@@ -17,9 +17,9 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@openclaw/zalouser": "2026.5.28",
+    "@openclaw/zalouser": "2026.6.6",
     "@types/node": "22.18.1",
-    "openclaw": "2026.5.28",
+    "openclaw": "2026.6.6",
     "typescript": "5.9.3"
   },
   "peerDependencies": {
@@ -43,7 +43,7 @@
       "pluginApi": ">=2026.5.28"
     },
     "build": {
-      "openclawVersion": "2026.5.28"
+      "openclawVersion": "2026.6.6"
     },
     "channel": {
       "id": "zalouser",

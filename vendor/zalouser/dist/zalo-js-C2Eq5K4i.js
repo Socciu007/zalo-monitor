@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import { extensionForMime } from "openclaw/plugin-sdk/media-mime";
-import { asFiniteNumberInRange, parseStrictFiniteNumber, parseStrictNonNegativeInteger } from "openclaw/plugin-sdk/number-runtime";
+import { asDateTimestampMs, asFiniteNumberInRange, isFutureDateTimestampMs, parseStrictFiniteNumber, parseStrictNonNegativeInteger, resolveExpiresAtMsFromDurationMs, resolveTimerTimeoutMs } from "openclaw/plugin-sdk/number-runtime";
 import { loadOutboundMediaFromUrl } from "openclaw/plugin-sdk/outbound-media";
 import { privateFileStoreSync, readRegularFileSync, statRegularFileSync, withTimeout } from "openclaw/plugin-sdk/security-runtime";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
@@ -220,15 +220,16 @@ function normalizeMessageContent(content) {
 	}
 }
 function resolveInboundTimestamp(rawTs) {
+	const fallbackTimestamp = () => asDateTimestampMs(Date.now()) ?? 0;
 	const timestamp = asFiniteNumberInRange(typeof rawTs === "number" ? rawTs : typeof rawTs === "string" ? parseStrictFiniteNumber(rawTs) : void 0, {
 		min: 0,
 		minExclusive: true,
 		max: Number.MAX_SAFE_INTEGER
 	});
-	if (timestamp === void 0) return Date.now();
-	if (timestamp > ZALO_TIMESTAMP_MS_THRESHOLD) return Math.trunc(timestamp);
-	if (timestamp > MAX_SAFE_ZALO_TIMESTAMP_SECONDS) return Date.now();
-	return Math.trunc(timestamp * 1e3);
+	if (timestamp === void 0) return fallbackTimestamp();
+	if (timestamp > ZALO_TIMESTAMP_MS_THRESHOLD) return asDateTimestampMs(Math.trunc(timestamp)) ?? fallbackTimestamp();
+	if (timestamp > MAX_SAFE_ZALO_TIMESTAMP_SECONDS) return fallbackTimestamp();
+	return asDateTimestampMs(Math.trunc(timestamp * 1e3)) ?? fallbackTimestamp();
 }
 function extractMentionIds(rawMentions) {
 	if (!Array.isArray(rawMentions)) return [];
@@ -555,7 +556,7 @@ function readCachedGroupContext(profile, groupId) {
 	const key = makeGroupContextCacheKey(profile, groupId);
 	const cached = groupContextCache.get(key);
 	if (!cached) return null;
-	if (cached.expiresAt <= Date.now()) {
+	if (!isFutureDateTimestampMs(cached.expiresAt)) {
 		groupContextCache.delete(key);
 		return null;
 	}
@@ -565,7 +566,7 @@ function readCachedGroupContext(profile, groupId) {
 }
 function trimGroupContextCache(now) {
 	for (const [key, value] of groupContextCache) {
-		if (value.expiresAt > now) continue;
+		if (isFutureDateTimestampMs(value.expiresAt, { nowMs: now })) continue;
 		groupContextCache.delete(key);
 	}
 	while (groupContextCache.size > GROUP_CONTEXT_CACHE_MAX_ENTRIES) {
@@ -578,9 +579,11 @@ function writeCachedGroupContext(profile, context) {
 	const now = Date.now();
 	const key = makeGroupContextCacheKey(profile, context.groupId);
 	if (groupContextCache.has(key)) groupContextCache.delete(key);
+	const expiresAt = resolveExpiresAtMsFromDurationMs(GROUP_CONTEXT_CACHE_TTL_MS, { nowMs: now });
+	if (expiresAt === void 0) return;
 	groupContextCache.set(key, {
 		value: context,
-		expiresAt: now + GROUP_CONTEXT_CACHE_TTL_MS
+		expiresAt
 	});
 	trimGroupContextCache(now);
 }
@@ -1073,7 +1076,7 @@ async function startZaloQrLogin(params) {
 	}
 	const active = activeQrLogins.get(profile);
 	if (!active) return { message: "Failed to initialize Zalo QR login." };
-	const timeoutMs = Math.max(params.timeoutMs ?? DEFAULT_QR_START_TIMEOUT_MS, 3e3);
+	const timeoutMs = resolveTimerTimeoutMs(params.timeoutMs, DEFAULT_QR_START_TIMEOUT_MS, 3e3);
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		if (active.error) {
@@ -1109,7 +1112,7 @@ async function waitForZaloQrLogin(params) {
 			message: "QR login expired. Start again to generate a fresh QR code."
 		};
 	}
-	const timeoutMs = Math.max(params.timeoutMs ?? DEFAULT_QR_WAIT_TIMEOUT_MS, 1e3);
+	const timeoutMs = resolveTimerTimeoutMs(params.timeoutMs, DEFAULT_QR_WAIT_TIMEOUT_MS, 1e3);
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		if (active.error) {
@@ -1157,9 +1160,9 @@ async function startZaloListener(params) {
 	const profile = normalizeProfile(params.profile);
 	const existing = activeListeners.get(profile);
 	if (existing) throw new Error(`Zalo listener already running for profile "${profile}" (account "${existing.accountId}")`);
-	const { api, ownUserId } = await withZaloApi(profile, async (api) => ({
-		api,
-		ownUserId: await resolveOwnUserId(api)
+	const { api, ownUserId } = await withZaloApi(profile, async (apiLocal) => ({
+		api: apiLocal,
+		ownUserId: await resolveOwnUserId(apiLocal)
 	}));
 	let stopped = false;
 	let watchdogTimer = null;

@@ -1,4 +1,4 @@
-import { a as DEFAULT_ACCOUNT_ID, c as isNumericTargetId, d as checkZcaAuthenticated, f as listZalouserAccountIds, i as writeQrDataUrlToTempFile, l as normalizeAccountId, m as resolveZalouserAccountSync, n as createZalouserSetupWizardProxy, o as chunkTextForOutbound, p as resolveDefaultZalouserAccountId, r as zalouserSetupAdapter, s as isDangerousNameMatchingEnabled, t as createZalouserPluginBase, u as sendPayloadWithChunkedTextAndMedia } from "./shared-BnQwl7bD.js";
+import { a as DEFAULT_ACCOUNT_ID, c as isNumericTargetId, d as checkZcaAuthenticated, f as listZalouserAccountIds, i as writeQrDataUrlToTempFile, l as normalizeAccountId, m as resolveZalouserAccountSync, n as createZalouserSetupWizardProxy, o as chunkTextForOutbound, p as resolveDefaultZalouserAccountId, r as zalouserSetupAdapter, s as isDangerousNameMatchingEnabled, t as createZalouserPluginBase, u as sendPayloadWithChunkedTextAndMedia } from "./shared-xBuXIOwv.js";
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import { createAccountStatusSink, defineChannelMessageAdapter } from "openclaw/plugin-sdk/channel-outbound";
 import { buildPassiveProbedChannelStatusSummary, coerceStatusIssueAccountId, readStatusIssueFields } from "openclaw/plugin-sdk/extension-shared";
@@ -204,7 +204,7 @@ function resolveZalouserOutboundSessionRoute(params) {
 }
 //#endregion
 //#region extensions/zalouser/src/channel.adapters.ts
-const loadZalouserChannelRuntime$1 = createLazyRuntimeModule(() => import("./channel.runtime-Dyh9b6nd.js"));
+const loadZalouserChannelRuntime$1 = createLazyRuntimeModule(() => import("./channel.runtime-CmquHp26.js"));
 const ZALOUSER_TEXT_CHUNK_LIMIT = 2e3;
 function resolveZalouserQrProfile(accountId) {
 	const normalized = normalizeAccountId(accountId);
@@ -535,8 +535,8 @@ function collectZalouserStatusIssues(accounts) {
 }
 //#endregion
 //#region extensions/zalouser/src/channel.ts
-const loadZalouserChannelRuntime = createLazyRuntimeModule(() => import("./channel.runtime-Dyh9b6nd.js"));
-const zalouserSetupWizardProxy = createZalouserSetupWizardProxy(async () => (await import("./setup-surface-W1VQqpf0.js").then((n) => n.t)).zalouserSetupWizard);
+const loadZalouserChannelRuntime = createLazyRuntimeModule(() => import("./channel.runtime-CmquHp26.js"));
+const zalouserSetupWizardProxy = createZalouserSetupWizardProxy(async () => (await import("./setup-surface-C8VXOMBu.js").then((n) => n.t)).zalouserSetupWizard);
 function mapUser(params) {
 	return {
 		kind: "user",
@@ -653,7 +653,7 @@ const zalouserPlugin = createChatChannelPlugin({
 					setStatus: ctx.setStatus
 				});
 				ctx.log?.info(`[${account.accountId}] starting zalouser provider${userLabel}`);
-				const { monitorZalouserProvider } = await import("./monitor-Dv5gqTDI.js");
+				const { monitorZalouserProvider } = await import("./monitor-DxOj93Pa.js");
 				return monitorZalouserProvider({
 					account,
 					config: ctx.cfg,
