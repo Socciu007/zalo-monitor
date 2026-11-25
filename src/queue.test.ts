@@ -10,6 +10,7 @@ import {
   listPendingRecords,
   markDelivered,
   markRejected,
+  readCheckpoint,
   readStatus,
   toBackendPayload,
   type PendingRecord,
@@ -114,6 +115,15 @@ test("checkpoint hỏng dạng mảng → coi như chưa có checkpoint, không 
   assert.equal(await isCaptured(dir, "g1", "msg-1"), true);
 });
 
+test("checkpoint group hỏng → dựng lại group, không throw", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-queue-"));
+  await writeFile(path.join(dir, "checkpoint.json"), JSON.stringify({ g1: "không phải object" }), "utf8");
+  const record = makeRecord();
+  await enqueueCapture(dir, record);
+  await markDelivered(dir, record, 201);
+  assert.equal(await isCaptured(dir, "g1", "msg-1"), true);
+});
+
 test("markDelivered ghi checkpoint trước rồi mới xoá file pending — crash giữa chừng không mất tin", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-queue-"));
   const record = makeRecord();
@@ -123,4 +133,22 @@ test("markDelivered ghi checkpoint trước rồi mới xoá file pending — cr
   await assert.rejects(() => markDelivered(dir, record, 201));
   // File pending phải còn nguyên để lần flush sau giao lại được.
   assert.equal((await listPendingRecords(dir)).length, 1);
+});
+
+test("checkpoint giới hạn số id mỗi group, giữ lại id mới nhất", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-queue-"));
+  const seeded: Record<string, { at: string }> = {};
+  for (let i = 0; i < 2_001; i += 1) {
+    seeded[`old-${i}`] = { at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() };
+  }
+  await writeFile(path.join(dir, "checkpoint.json"), JSON.stringify({ g1: seeded }), "utf8");
+  const record = makeRecord({ id: buildRecordId("g1", "newest"), messageId: "newest" });
+  await enqueueCapture(dir, record);
+  await markDelivered(dir, record, 201);
+  const checkpoint = await readCheckpoint(dir);
+  const group = checkpoint["g1"] ?? {};
+  assert.equal(Object.keys(group).length, 2_000, "số id của group phải bị giới hạn");
+  assert.ok(group["newest"], "id vừa giao phải còn trong checkpoint");
+  assert.equal(group["old-0"], undefined, "id cũ nhất phải bị bỏ");
+  assert.ok(group["old-2000"], "id mới hơn phải được giữ");
 });

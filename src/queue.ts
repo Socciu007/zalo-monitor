@@ -115,10 +115,34 @@ export async function isCaptured(stateDir: string, groupId: string, messageId: s
   return Boolean(checkpoint[groupId]?.[messageId]);
 }
 
+/**
+ * Số message id được giữ lại cho mỗi group trong checkpoint.
+ * Checkpoint bị đọc và ghi lại toàn bộ cho mỗi tin → không có giới hạn thì file
+ * phình vô hạn (100k tin ≈ 10 MB, đọc + ghi lại cho từng tin).
+ */
+const MAX_CHECKPOINT_IDS_PER_GROUP = 2000;
+
+/** Bỏ các entry cũ nhất của group cho tới khi còn tối đa `MAX_CHECKPOINT_IDS_PER_GROUP`. */
+function pruneCheckpointGroup(group: Record<string, { at: string }>): void {
+  const entries = Object.entries(group);
+  if (entries.length <= MAX_CHECKPOINT_IDS_PER_GROUP) return;
+  // `at` là ISO timestamp nên so sánh chuỗi đúng thứ tự thời gian.
+  const at = (value: { at?: unknown } | undefined): string => (typeof value?.at === "string" ? value.at : "");
+  entries.sort((a, b) => (at(a[1]) < at(b[1]) ? -1 : at(a[1]) > at(b[1]) ? 1 : 0));
+  for (const [messageId] of entries.slice(0, entries.length - MAX_CHECKPOINT_IDS_PER_GROUP)) {
+    delete group[messageId];
+  }
+}
+
 async function markCheckpoint(stateDir: string, record: PendingRecord): Promise<void> {
   const checkpoint = await readCheckpoint(stateDir);
-  const group = (checkpoint[record.groupId] ??= {});
+  // Group hỏng (không phải object) → dựng lại group sạch thay vì ném lỗi.
+  const existing = checkpoint[record.groupId];
+  const group: Record<string, { at: string }> =
+    existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+  checkpoint[record.groupId] = group;
   group[record.messageId] = { at: new Date().toISOString() };
+  pruneCheckpointGroup(group);
   await writeJsonAtomic(resolveCheckpointPath(stateDir), checkpoint);
 }
 
