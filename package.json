@@ -8,7 +8,8 @@
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
     "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "vendor:refresh": "node scripts/vendor-refresh.mjs"
+    "vendor:refresh": "node scripts/vendor-refresh.mjs",
+    "link:host-sdk": "node scripts/link-host-sdk.mjs"
   },
   "dependencies": {
     "zca-js": "2.1.2",
