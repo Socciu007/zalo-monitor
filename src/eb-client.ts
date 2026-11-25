@@ -29,10 +29,17 @@ function sleep(ms: number): Promise<void> {
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /**
+ * 4xx vẫn còn thử lại được: 408 (timeout phía server) và 429 (bị giới hạn tần suất)
+ * là lỗi tạm thời — đẩy vào `rejected/` sẽ vĩnh viễn bỏ mất tin.
+ */
+const RETRYABLE_CLIENT_STATUSES = new Set([408, 429]);
+
+/**
  * POST payload 6 field lên backend.
  *
  * - 2xx → `delivered`.
- * - 4xx → `rejected`, không retry (cùng payload sẽ bị từ chối y hệt).
+ * - 4xx (trừ 408/429) → `rejected`, không retry (cùng payload sẽ bị từ chối y hệt).
+ * - 408/429 → retry như lỗi tạm thời, hết lượt thì trả `failed` (giữ record trong queue).
  * - 5xx / lỗi mạng / timeout → retry với backoff `retryDelaysMs`, tối đa `maxAttempts` request
  *   (1 lần đầu + N-1 lần retry). Hết lượt thì trả `failed` để caller giữ record trong queue.
  */
@@ -54,9 +61,13 @@ export async function postCaptureToBackend(config: EbClientConfig, payload: Back
         return { kind: "delivered", status: response.status };
       }
       if (response.status >= 400 && response.status < 500) {
-        return { kind: "rejected", status: response.status, error: `post_rejected_4xx:${response.status}` };
+        if (!RETRYABLE_CLIENT_STATUSES.has(response.status)) {
+          return { kind: "rejected", status: response.status, error: `post_rejected_4xx:${response.status}` };
+        }
+        lastError = `post_failed_retryable_4xx:${response.status}`;
+      } else {
+        lastError = `post_failed_5xx:${response.status}`;
       }
-      lastError = `post_failed_5xx:${response.status}`;
     } catch (err) {
       lastStatus = null;
       lastError = `post_failed_network:${err instanceof Error ? err.message : String(err)}`;

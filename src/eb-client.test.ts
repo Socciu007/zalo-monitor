@@ -54,6 +54,32 @@ test("4xx → rejected, không retry (đúng 1 request)", async () => {
     const outcome = await postCaptureToBackend({ backendUrl: url, timeoutMs: 2000, maxAttempts: 4, retryDelaysMs: [1, 1, 1] }, payload);
     assert.equal(outcome.kind, "rejected");
     assert.equal(calls, 1);
+    if (outcome.kind !== "rejected") throw new Error("expected rejected");
+    assert.equal(outcome.error, "post_rejected_4xx:400");
+  });
+});
+
+test("429 → failed, retry đủ maxAttempts (không bị đẩy vào rejected)", async () => {
+  let calls = 0;
+  await withServer(429, () => { calls += 1; }, async (url) => {
+    const outcome = await postCaptureToBackend({ backendUrl: url, timeoutMs: 2000, maxAttempts: 4, retryDelaysMs: [1, 1, 1] }, payload);
+    assert.equal(outcome.kind, "failed");
+    assert.equal(calls, 4);
+    assert.equal(outcome.status, 429);
+    if (outcome.kind !== "failed") throw new Error("expected failed");
+    assert.equal(outcome.error, "post_failed_retryable_4xx:429");
+  });
+});
+
+test("408 → failed, retry đủ maxAttempts (không bị đẩy vào rejected)", async () => {
+  let calls = 0;
+  await withServer(408, () => { calls += 1; }, async (url) => {
+    const outcome = await postCaptureToBackend({ backendUrl: url, timeoutMs: 2000, maxAttempts: 4, retryDelaysMs: [1, 1, 1] }, payload);
+    assert.equal(outcome.kind, "failed");
+    assert.equal(calls, 4);
+    assert.equal(outcome.status, 408);
+    if (outcome.kind !== "failed") throw new Error("expected failed");
+    assert.equal(outcome.error, "post_failed_retryable_4xx:408");
   });
 });
 
