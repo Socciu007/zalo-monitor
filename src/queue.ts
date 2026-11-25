@@ -36,6 +36,15 @@ export interface CaptureStatus {
 }
 
 /**
+ * Số record đang chờ / đã bị từ chối, đo một lần cho cả lượt flush.
+ * Truyền vào `updateStatus` để không phải quét lại thư mục sau mỗi record.
+ */
+export interface QueueCounts {
+  pending: number;
+  rejected: number;
+}
+
+/**
  * Id ổn định cho file pending: 32 ký tự hex SHA-1 của `(groupId, messageId)`.
  *
  * Id không phụ thuộc thời điểm capture → capture lại cùng một tin sẽ ghi đè
@@ -141,14 +150,18 @@ export async function readStatus(stateDir: string): Promise<CaptureStatus> {
   return { ...fallback, ...(stored as Partial<CaptureStatus>) };
 }
 
-/** Ghi `status.json`; `pending`/`rejected` luôn được tính lại từ đĩa, không tin patch. */
-export async function updateStatus(stateDir: string, patch: Partial<CaptureStatus>): Promise<void> {
+/**
+ * Ghi `status.json`.
+ * `pending`/`rejected` mặc định được tính lại từ đĩa; khi caller đã biết số liệu
+ * (một lượt flush đang chạy) thì truyền `counts` để khỏi quét lại thư mục.
+ */
+export async function updateStatus(stateDir: string, patch: Partial<CaptureStatus>, counts?: QueueCounts): Promise<void> {
   const current = await readStatus(stateDir);
   const next: CaptureStatus = {
     ...current,
     ...patch,
-    pending: await countPending(stateDir),
-    rejected: await countRejected(stateDir),
+    pending: counts ? counts.pending : await countPending(stateDir),
+    rejected: counts ? counts.rejected : await countRejected(stateDir),
     updatedAt: new Date().toISOString(),
   };
   await writeJsonAtomic(resolveStatusPath(stateDir), next);
@@ -170,17 +183,17 @@ export async function removePendingRecord(stateDir: string, record: PendingRecor
  * được giao lại (backend phải chịu được duplicate). Xoá file trước rồi chết thì
  * tin đó mất hẳn, vì zca-js không bảo đảm giao lại tin đã gửi.
  */
-export async function markDelivered(stateDir: string, record: PendingRecord, status: number): Promise<void> {
+export async function markDelivered(stateDir: string, record: PendingRecord, status: number, counts?: QueueCounts): Promise<void> {
   await markCheckpoint(stateDir, record);
   await removePendingRecord(stateDir, record);
-  await updateStatus(stateDir, { lastPostAt: new Date().toISOString(), lastPostStatus: status, lastError: null });
+  await updateStatus(stateDir, { lastPostAt: new Date().toISOString(), lastPostStatus: status, lastError: null }, counts);
 }
 
 /**
  * Backend từ chối (4xx): chuyển file sang `pending/rejected/` để không gửi lại nữa.
  * Rename thất bại (ví dụ khác device) → ghi file mới rồi xoá file cũ.
  */
-export async function markRejected(stateDir: string, record: PendingRecord, status: number): Promise<void> {
+export async function markRejected(stateDir: string, record: PendingRecord, status: number, counts?: QueueCounts): Promise<void> {
   await ensureStateDirs(stateDir);
   const source = path.join(resolvePendingDir(stateDir), `${record.id}.json`);
   const target = path.join(resolveRejectedDir(stateDir), `${record.id}.json`);
@@ -194,5 +207,5 @@ export async function markRejected(stateDir: string, record: PendingRecord, stat
     lastPostAt: new Date().toISOString(),
     lastPostStatus: status,
     lastError: `post_rejected_4xx:${status}`,
-  });
+  }, counts);
 }
