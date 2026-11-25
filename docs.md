@@ -1,18 +1,20 @@
-# 2026-11-24 Prompt 统计
+# Prompt 统计日志（2026-11-24 / 2026-11-25）
 
-本文档统计 **2026-11-24** 当天由人类用户发出的 prompt（不含工具调用结果、不含系统自动注入的 system-reminder / task-notification、不含 skill 加载文本）。
+本文档统计 **2026-11-24** 与 **2026-11-25** 两天由人类用户发出的 prompt（不含工具调用结果、不含系统自动注入的 system-reminder / task-notification、不含 skill 加载文本）。每一天各自成篇，结构相同：第 1 部分按时间排列，第 2 部分逐条展开。
 
 | 项目 | 说明 |
 |---|---|
-| 统计日期 | 2026-11-24 |
+| 统计日期 | 2026-11-24、2026-11-25 |
 | 数据来源 | Claude Code 会话记录 `~/.claude/projects/*/*.jsonl` |
 | 时间基准 | 本机时区 `Asia/Shanghai`（UTC+8）。原始记录为 UTC，文中同时给出本地时间 |
-| 覆盖会话 | `e--projectVN-zalo-monitor`（当前项目）、`e--projectVN-ebvn-server` |
+| 覆盖会话 | `e--projectVN-zalo-monitor`（当前项目）、`e--projectVN-ebvn-server`、`e--projectVN-ebcrm-foreground` |
 | 统计口径 | 主会话（`isSidechain: false`）中 `promptSource == "sdk"` 的文本块，以及 `AskUserQuestion` 工具返回的「用户作答」记录 |
-| 排除项 | `tool_result` 块、`<system-reminder>` / `<task-notification>` 系统注入、`<ide_opened_file>` IDE 上下文、skill 加载文本、子代理（sidechain）内部的轮次 |
-| prompt 总数 | **16** 条（12 条自由文本 + 4 组选项作答，按会话归属分别为 12 + 4） |
+| 排除项 | `tool_result` 块、`<system-reminder>` / `<task-notification>` 系统注入、`<ide_opened_file>` / `<ide_selection>` IDE 上下文、skill 加载文本、子代理（sidechain）内部的轮次 |
+| prompt 总数 | **29** 条（2026-11-24: 16 条；2026-11-25: 13 条） |
 
 ---
+
+# 2026-11-24
 
 ## 第 1 部分：Prompt 时间表
 
@@ -398,3 +400,355 @@ commit code
 | 捕获 tap | `src/capture.ts`（入口）、`vendor/zalouser/dist/monitor-*.js`（插入点） |
 | vendor 与补丁脚本 | `vendor/zalouser/`、`scripts/vendor-refresh.mjs` |
 | 运维文档 | `README.md` |
+
+---
+
+# 2026-11-25
+
+## 第 1 部分：Prompt 时间表
+
+### 1.1 会话 `e--projectVN-zalo-monitor`（当前项目，session `d9da32eb`）
+
+| # | 本地时间 (UTC+8) | UTC | 类型 | Prompt 摘要 |
+|---|---|---|---|---|
+| Q-01 | 09:55:03 | 01:55:03Z | 自由文本 | `continue handle agent` — 继续走子代理流程 |
+| Q-02 | 12:03:17 | 04:03:17Z | 选项作答 | 分支如何收尾 → **Merge vào main（khuyến nghị）** |
+| Q-03 | 13:31:12 | 05:31:12Z | 自由文本（粘贴终端输出） | 安装报错：`channels.zalo-monitor: unknown channel id` |
+| Q-04 | 13:55:19 | 05:55:19Z | 自由文本 | 要一份 Linux 服务器部署文档 |
+| Q-05 | 14:15:17 | 06:15:17Z | 自由文本 | 服务器上跑 openclaw 2026.6.6 会不会出问题 |
+| Q-06 | 16:25:21 | 08:25:21Z | 自由文本 | bump vendor zalouser + openclaw lên 2026.6.6、更新 manifest、不用跑测试 |
+| Q-07 | 16:29:32 | 08:29:32Z | 自由文本 | commit 掉，剩下的步骤自己来 |
+| Q-08 | 16:38:00 | 08:38:00Z | 自由文本 | 统计 25-11-2026 当天的 prompt 到 docs.md |
+
+### 1.2 会话 `e--projectVN-ebvn-server`
+
+| # | 本地时间 (UTC+8) | UTC | 类型 | Prompt 摘要 |
+|---|---|---|---|---|
+| Q-09 | 09:19:31 | 01:19:31Z | 自由文本（附粘贴） | 补一个取 SNL 船期表的函数：找不到 stCode/edCode 时按注释里的请求取 |
+| Q-10 | 09:50:39 | 01:50:39Z | 自由文本 | `commit code` |
+
+### 1.3 会话 `e--projectVN-ebcrm-foreground`
+
+| # | 本地时间 (UTC+8) | UTC | 类型 | Prompt 摘要 |
+|---|---|---|---|---|
+| Q-11 | 15:18:11 | 07:18:11Z | 自由文本 | `http://localhost:9527/...` 这个地址怎么调 API |
+| Q-12 | 15:24:15 | 07:24:15Z | 自由文本 | 界面能加载，但取不到服务器数据 |
+| Q-13 | 15:44:13 | 07:44:13Z | 自由文本 | 把 task 停掉，改成手动跑 |
+
+### 1.4 时间分布（2026-11-25 全部会话）
+
+| 时段 | 条数 | 会话 |
+|---|---|---|
+| 09:00–10:00 | 3 | zalo-monitor 1、ebvn-server 2 |
+| 10:00–12:00 | 0 | — |
+| 12:00–14:00 | 2 | zalo-monitor 2（作答 + 报错粘贴） |
+| 14:00–15:00 | 1 | zalo-monitor 1 |
+| 15:00–16:00 | 3 | ebcrm-foreground 3 |
+| 16:00–17:00 | 4 | zalo-monitor 4 |
+
+---
+
+## 第 2 部分：逐条明细
+
+### Q-01 · 09:55:03 · 自由文本
+
+**原文（逐字）**
+
+```
+continue handle agent
+```
+
+**中文翻译**
+
+> 继续走子代理（agent）流程。
+
+**处理与结果**
+
+- 上一轮结束时停在「final review toàn bộ implementation」这一步。随即派出终审 reviewer 复查全部 28 个 commit。
+- 终审结论 **Approved with changes**，并找出 **7 个此前逐任务评审都漏掉的缺陷**，其中 3 个属严重级：启动时的 replay 会 POST 到**错误的 backend**、重复 capture 会产生**第二个 pending 文件导致重复投递**、`markDelivered` 先删文件后写 checkpoint 造成**崩溃窗口内丢消息**。这 7 项随后由一个修复 agent 用 TDD 全部修掉（59 个测试）。
+
+---
+
+### Q-02 · 12:03:17 · 选项作答（分支收尾）
+
+**原文（逐字）**
+
+```
+Implementation đã xong (59/59 test xanh, build OK, git sạch). Bạn muốn xử lý branch thế nào?
+→ "Merge vào main (khuyến nghị)"
+```
+
+**中文翻译**
+
+> 实现已经完成（59/59 测试通过，构建正常，git 干净）。分支你想怎么处理？
+> → **合并回 main（推荐项）**
+
+**处理与结果**
+
+- 按「finishing-a-development-branch」流程执行：先复验测试通过 → 检测环境（普通仓库，非 worktree）→ 执行合并。
+- `git merge --no-ff feature/zalo-monitor-fork` → 在合并结果上**重跑测试**（59/59 通过）→ 删除 feature 分支。合并提交 `7c636c4`。
+
+---
+
+### Q-03 · 13:31:12 · 自由文本（粘贴终端输出）
+
+**原文（逐字，粘贴内容节选）**
+
+```
+PS E:\projectVN\zalo-monitor> openclaw plugins install --link e:/projectVN/zalo-monitor
+Invalid config at C:\Users\Administrator\.openclaw\openclaw.json:\n
+- channels.zalo-monitor: unknown channel id: zalo-monitor
+```
+
+**中文翻译**
+
+> （粘贴）执行 `openclaw plugins install --link` 时报错：配置里有 `channels.zalo-monitor`，但这不是一个已知的 channel id。
+
+**处理与结果**
+
+- 根因是**把 plugin id 当成了 channel id**。实际上：channel id 是 `zalouser`（fork 提供的 channel），`zalo-monitor` 是 plugin id，其配置应写在 `plugins.entries["zalo-monitor"].config`。
+- 同时发现用户把 `channels.zalouser.enabled` 设成了 `false`（会连 fork 一起停掉），而真正该关的是 `plugins.entries.zalouser.enabled`（npm 版插件）。
+- 备份 `openclaw.json.bak.before-zalo-monitor` 后修正三处 → `openclaw config validate` 通过 → 链接成功 → 重启 gateway（Windows 计划任务）→ 校验：**0** 条 `channel already registered` 诊断、插件加载成功、channel 正常启动。
+
+---
+
+### Q-04 · 13:55:19 · 自由文本
+
+**原文（逐字）**
+
+```
+ok đây đang là cài đặt ở local, nếu tôi muốn cài đặt ở máy chủ linux thì viết cho tôi tài liệu hương dẫn phần đó
+```
+
+**中文翻译**
+
+> 好的，现在是本地安装。如果我想部署到 Linux 服务器上，帮我写一份那部分的部署指南。
+
+**处理与结果**
+
+- 先读源码核实 Linux 相关事实，而非凭印象编写：`writeQrDataUrlToTempFile`（QR 写成 PNG、等待 180 秒）、`scripts/link-host-sdk.mjs` 的 POSIX 分支（`<prefix>/lib/node_modules`、symlink type `dir`）、openclaw 官方文档里的 systemd user unit 与 SSH 隧道用法。
+- 产出 `docs/deploy-linux.md`（350 行，10 节），并在 README 顶部加入口。提交 `3058393`。
+- 额外发现并写入文档的坑：`nvm` 会让 SDK symlink 失效、`npm ci` 会清掉 symlink、systemd user unit 在 logout 后会停、gateway 日志在 `/tmp/openclaw/` 重启即失。
+
+---
+
+### Q-05 · 14:15:17 · 自由文本
+
+**原文（逐字）**
+
+```
+nếu sử dụng phiên bản openclaw 2026.6.6 trên máy chủ thì plugin này có gặp lỗi gì không
+```
+
+**中文翻译**
+
+> 如果在服务器上使用 openclaw 2026.6.6 版本，这个插件会不会有问题？
+
+**处理与结果**
+
+- 没有靠文档推断，而是**实测**：下载 `openclaw@2026.6.6` 与 `@openclaw/zalouser@2026.6.6`，装进隔离前缀。
+- 静态核对：插件与 vendor 代码共用到 **37 个 SDK 子路径、91 个导出名**，在 2026.6.6 中**一个都没少**；manifest 字段（`preferOver`、`channelConfigs`、`runtimeExtensions`…）全部仍被 host 识别。
+- 动态验证：真正 boot 一个 2026.6.6 的 gateway —— 插件加载成功（`http server listening (8 plugins: …, zalo-monitor)`），channel 启动并**真实连上 Zalo**（日志出现 group 名 `MẠnh TiỀn`）。
+- 另外把 zalouser 重新 vendor 成 2026.6.6 并重打 patch：anchor 未变、补丁干净套用、与上游 diff 仍只有 2 处、59/59 测试通过。
+- 结论：**2026.6.6 没有兼容问题**（唯一报错 `Zalo listener closed (1000)` 是 cookie 过期，与版本无关）。
+
+---
+
+### Q-06 · 16:25:21 · 自由文本
+
+**原文（逐字）**
+
+```
+bump repo lên vendor zalouser 2026.6.6 "@openclaw/zalouser": "2026.6.6",
+    "openclaw": "2026.6.6" và cập nhật manifest nhưng không cần test
+```
+
+**中文翻译**
+
+> 把 repo 升级到 vendor zalouser 2026.6.6（`"@openclaw/zalouser": "2026.6.6"`、`"openclaw": "2026.6.6"`），并更新 manifest，但不需要跑测试。
+
+**处理与结果**
+
+- 改 `package.json`（两个 devDependency + `build.openclawVersion`）、`npm install`、`npm run vendor:refresh`（重新 vendor + 同步 manifest 里的 channel schema）、`npm run link:host-sdk`、build，提交 `f06a19a`。
+- `compat.pluginApi` 保持 `>=2026.5.28`，这样本地 2026.5.28 的 gateway 仍能接受该插件。
+- **过程中发现一处真实的不兼容**：用 2026.5.28 的 host 去跑 vendor 2026.6.6 的 channel 会启动失败——
+  `[zalouser] channel startup failed: The requested module 'openclaw/plugin-sdk/number-runtime' does not provide an export named 'asDateTi…'`
+  根因是该 SDK 子路径在 2026.5.28 中缺 3 个导出：`asDateTimestampMs`、`isFutureDateTimestampMs`、`resolveExpiresAtMsFromDurationMs`。
+  ⇒ **vendor 的 channel 版本必须与 host 版本配套**。已如实告知用户并给出两个选项。
+
+---
+
+### Q-07 · 16:29:32 · 自由文本
+
+**原文（逐字）**
+
+```
+hãy commit, tôi sẽ tự thao tác các bước còn lại
+```
+
+**中文翻译**
+
+> 你来提交吧，剩下的步骤我自己操作。
+
+**处理与结果**
+
+- 提交 `f06a19a`（含 `package.json`、`package-lock.json`、`openclaw.plugin.json`、`vendor/**`、README）。
+- 同时明确告知：**本地 2026.5.28 的 gateway 一旦重启就会失效**（正在运行的实例仍在内存里用旧插件，所以暂时没事），并给出两条出路：把本地 openclaw 升到 2026.6.6，或回退 vendor 到 2026.5.28、在服务器端单独 bump。
+
+---
+
+### Q-08 · 16:38:00 · 自由文本
+
+**原文（逐字）**
+
+```
+thống kê các prompt ngày 25-11-2026 vào file docs.md
+```
+
+**中文翻译**
+
+> 把 2026-11-25 当天的 prompt 统计到 docs.md 文件里。
+
+**处理与结果**
+
+- 从 `~/.claude/projects/*/*.jsonl` 提取当日人类 prompt：主会话 + `promptSource == "sdk"` + `AskUserQuestion` 作答，排除 tool_result、system-reminder、IDE 上下文与 skill 文本。
+- 当日跨 3 个会话共 **13** 条：`zalo-monitor` 8（含 1 条作答）、`ebvn-server` 2、`ebcrm-foreground` 3。
+- 本文件改为两日合集，25-11 单列一章，结构与 24-11 一致（第 1 部分时间表 + 第 2 部分逐条明细）。
+
+---
+
+### Q-09 · 09:19:31 · 自由文本（会话 `e--projectVN-ebvn-server`）
+
+**原文（逐字，附粘贴的请求注释）**
+
+```
+viết thêm hàm lấy lịch tàu SNL bổ sung nếu không tìm thấy stCode hoặc edCode dựa vào đoạn comment
+<pasted_content id="536f">
+// Fetch api to get {__VIEWSTATE: value} and list {__EVENTTARGET: RouteGridView$ctl02$LinkButton1}
+// POST https://ebusiness.sinolines.com.cn/Ebusiness/EQUERY/QueryServiceE.aspx
+// __EVENTTARGET: RouteGridView$ctl02$LinkButton1
+// autocomplete: SHANGHAI, CHINA(CNSHA)
+// autocompletemore: HOCHIMINH, VIETNAM(VNHCM)
+// Calendarfromtime: 2026 - 11 - 24 / Calendartotime: 2026 - 12 - 24
+</pasted_content>
+```
+
+**中文翻译**
+
+> 补一个取 SNL 船期表的函数：如果找不到 stCode 或 edCode，就按注释里那段请求来取。
+
+**处理与结果**
+
+- 属于另一项目（`ebvn-server`）的会话，与本插件开发无技术关联；此处仅按「当天全部 prompt」的口径登记。
+
+---
+
+### Q-10 · 09:50:39 · 自由文本（会话 `e--projectVN-ebvn-server`）
+
+**原文（逐字）**
+
+```
+commit code
+```
+
+**中文翻译**
+
+> 提交代码。
+
+**处理与结果**
+
+- 同上，属另一项目会话。
+
+---
+
+### Q-11 · 15:18:11 · 自由文本（会话 `e--projectVN-ebcrm-foreground`）
+
+**原文（逐字）**
+
+```
+http://localhost:9527/'http://localhost:3001'%20 sao gọi api này
+```
+
+**中文翻译**
+
+> `http://localhost:9527/` 这个地址怎么调用 API？
+
+**处理与结果**
+
+- 同上，属另一项目会话。
+
+---
+
+### Q-12 · 15:24:15 · 自由文本（会话 `e--projectVN-ebcrm-foreground`）
+
+**原文（逐字）**
+
+```
+vẫn có thể load giao diện nhưng không thể nạp dữ liệu từ máy chủ
+```
+
+**中文翻译**
+
+> 界面还能加载，但取不到服务器的数据。
+
+**处理与结果**
+
+- 同上，属另一项目会话。
+
+---
+
+### Q-13 · 15:44:13 · 自由文本（会话 `e--projectVN-ebcrm-foreground`）
+
+**原文（逐字）**
+
+```
+dừng task để chạy thủ công
+```
+
+**中文翻译**
+
+> 把 task 停掉，改成手动运行。
+
+**处理与结果**
+
+- 同上，属另一项目会话。
+
+---
+
+## 附：2026-11-25 产出的关键结论
+
+### 1. vendored channel 的版本必须与 host 配套
+
+| host | vendored channel | 结果（均为实际 boot 验证） |
+|---|---|---|
+| 2026.6.6 | 2026.6.6 | ✅ 插件加载、channel 启动并连上 Zalo |
+| 2026.6.6 | 2026.5.28 | ✅ 91/91 个 SDK 导出都在，照常工作 |
+| 2026.5.28 | 2026.6.6 | ❌ `channel startup failed`：SDK 缺 `asDateTimestampMs` / `isFutureDateTimestampMs` / `resolveExpiresAtMsFromDurationMs` |
+| 2026.5.28 | 2026.5.28 | ✅ |
+
+→ 部署时 `npm run vendor:refresh` 必须与 host 版本同步执行；`package.json` 里钉的 `@openclaw/zalouser` 版本就是这件事的开关。
+
+### 2. plugin id ≠ channel id
+
+| 名称 | 值 | 配在哪 |
+|---|---|---|
+| plugin id | `zalo-monitor` | `plugins.entries["zalo-monitor"]` |
+| channel id | `zalouser` | `channels.zalouser` |
+
+把 plugin 配置写进 `channels.<plugin-id>` 会直接报 `unknown channel id`（Q-03 的报错根因）。
+
+### 3. 停 npm 版插件 ≠ 关 channel
+
+- `channels.zalouser.enabled = false` → 连 fork 一起停掉。
+- `plugins.entries.zalouser.enabled = false` → 只停 npm 版，fork 仍持有 channel。
+
+---
+
+## 附：2026-11-25 产出物索引
+
+| 产物 | 路径 / 提交 |
+|---|---|
+| 合并到 main | `7c636c4` |
+| Linux 部署指南 | `docs/deploy-linux.md`（`3058393`） |
+| bump lên 2026.6.6 | `f06a19a` |
+| 终审发现的 7 个缺陷修复 | `f29d3eb`、`94f0c2b`、`4df948e`、`c24dc09`、`3168f22`、`c24c369`、`bc2b0b4`、`c69e03e` |
