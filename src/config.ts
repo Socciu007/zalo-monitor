@@ -38,14 +38,16 @@ function positiveInt(value: unknown): number | undefined {
 }
 
 /**
- * Đọc settings từ root OpenClaw config.
+ * Áp dụng config của plugin lên settings.
+ * `pluginConfig` là đúng giá trị `plugins.entries["zalo-monitor"].config`
+ * (hoặc `api.pluginConfig` của plugin API).
  * Mọi giá trị sai kiểu đều rơi về default thay vì ném lỗi — config hỏng
  * không được làm sập kênh message.
  */
-export function resolveCaptureSettings(rootConfig: unknown): CaptureSettings {
-  const raw = readPluginConfig(rootConfig);
+export function captureSettingsFromPluginConfig(pluginConfig: unknown): CaptureSettings {
   const settings: CaptureSettings = { ...DEFAULT_CAPTURE_SETTINGS, retryDelaysMs: [...DEFAULT_CAPTURE_SETTINGS.retryDelaysMs] };
-  if (!raw) return settings;
+  if (!pluginConfig || typeof pluginConfig !== "object" || Array.isArray(pluginConfig)) return settings;
+  const raw = pluginConfig as Record<string, unknown>;
   if (typeof raw.backendUrl === "string" && raw.backendUrl.trim()) settings.backendUrl = raw.backendUrl.trim();
   const timeoutMs = positiveInt(raw.timeoutMs);
   if (timeoutMs !== undefined) settings.timeoutMs = timeoutMs;
@@ -59,4 +61,13 @@ export function resolveCaptureSettings(rootConfig: unknown): CaptureSettings {
   }
   if (typeof raw.captureDm === "boolean") settings.captureDm = raw.captureDm;
   return settings;
+}
+
+/**
+ * Đọc settings từ root OpenClaw config.
+ * Mọi giá trị sai kiểu đều rơi về default thay vì ném lỗi — config hỏng
+ * không được làm sập kênh message.
+ */
+export function resolveCaptureSettings(rootConfig: unknown): CaptureSettings {
+  return captureSettingsFromPluginConfig(readPluginConfig(rootConfig));
 }

@@ -36,6 +36,11 @@ export function getLastCaptureSettings(): CaptureSettings {
   return lastSettings;
 }
 
+/** Nạp settings từ config của plugin — runtime dùng lúc khởi động, trước khi có tin nào. */
+export function setLastCaptureSettings(settings: CaptureSettings): void {
+  lastSettings = settings;
+}
+
 /** Tap: KHÔNG được ném exception ra channel, KHÔNG được chặn luồng chat. */
 export function captureZaloMessage(input: CaptureTapInput): void {
   try {

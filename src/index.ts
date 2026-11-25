@@ -25,6 +25,6 @@ export default defineBundledChannelEntry({
         })(ctx),
       { name: "zalouser" },
     );
-    startCaptureRuntime();
+    startCaptureRuntime(api.pluginConfig);
   },
 });

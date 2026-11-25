@@ -5,7 +5,8 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { captureZaloMessage, setCaptureStateDir } from "./capture.js";
+import { captureZaloMessage, getLastCaptureSettings, setCaptureStateDir, setLastCaptureSettings } from "./capture.js";
+import { DEFAULT_CAPTURE_SETTINGS } from "./config.js";
 import { listPendingRecords } from "./queue.js";
 
 test("captureZaloMessage ghi pending cho tin group và không throw", async () => {
@@ -49,4 +50,10 @@ test("captureZaloMessage bỏ qua tin DM khi captureDm=false", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 200));
   assert.equal((await listPendingRecords(dir)).length, 0);
+});
+
+test("setLastCaptureSettings nạp settings cache cho timer flush", () => {
+  setLastCaptureSettings({ ...DEFAULT_CAPTURE_SETTINGS, backendUrl: "http://example.test/x", flushIntervalMs: 1_234 });
+  assert.equal(getLastCaptureSettings().backendUrl, "http://example.test/x");
+  assert.equal(getLastCaptureSettings().flushIntervalMs, 1_234);
 });
