@@ -19,7 +19,10 @@
   `\tif (isGroup && requireMention && !canDetectMention && !mentionDecision.effectiveWasMentioned) {`
 - Tên file chứa `processMessage` **không cố định** → script patch phải dò file theo nội dung.
 - Tất cả `import` của file vendor nằm ở đầu file, mỗi import một dòng, cột 0.
-- `resolveZalouserMessageSid` đã được import sẵn trong file monitor (alias `o`).
+- `resolveZalouserMessageSid` đã được import sẵn trong file monitor, dưới **tên thật**:
+  `import { …, o as resolveZalouserMessageSid, … } from "./channel-*.js"` — `o` là **tên export** phía
+  `channel-*.js` (`resolveZalouserMessageSid as o`), còn binding cục bộ trong file monitor là
+  `resolveZalouserMessageSid`.
 - `config` trong `processMessage` là **root OpenClawConfig** (đã xác nhận qua `config.channels?.zalouser`).
 - `defineBundledChannelEntry` chỉ load được module **bên trong thư mục chứa entry** (boundary root = `dirname(importMetaUrl)`) → entry và code vendor phải cùng nằm trong `dist/`.
 - `openclaw.extensions` và `openclaw.runtimeExtensions` phải **cùng độ dài** (song song 1-1).
@@ -1968,3 +1971,35 @@ git commit -m "docs: document fork install, config, state and upgrade flow"
 3. `openclaw.channel` thêm `preferOver: ["zalouser"]` — khai báo quyền ưu tiên ngay từ Task 1.
 4. Task 9/10 copy vendor **đệ quy** thay vì chỉ copy file `.js` cấp cao nhất.
 5. Task 10 thêm `scripts/clean-dist.mjs` chạy trước `tsc`.
+
+---
+
+## Hardening sau implementation (vòng review cuối)
+
+Tám sửa đổi đã merge sau khi implementation xong — mỗi dòng là **vấn đề** → **thay đổi**:
+
+1. `f29d3eb` — **config/runtime**: replay backlog và timer lúc khởi động dùng `DEFAULT_CAPTURE_SETTINGS`
+   vì settings chỉ được nạp khi tin đầu tiên tới ⇒ backlog có thể bị POST nhầm sang backend khác →
+   tách `captureSettingsFromPluginConfig(pluginConfig)` ra `config.ts` và `startCaptureRuntime(api.pluginConfig)`
+   nạp config của plugin **trước** replay + trước khi hẹn timer.
+2. `94f0c2b` — **queue**: id file pending chứa timestamp ⇒ capture lại cùng một tin tạo file thứ hai,
+   giao trùng lên backend → `buildRecordId(groupId, messageId)` = 32 ký tự hex SHA-1 trên
+   `groupId\0messageId`, **không timestamp** ⇒ capture lại ghi đè đúng file cũ.
+3. `4df948e` — **queue/flush**: `markDelivered` xoá file pending **trước** rồi mới ghi checkpoint ⇒
+   chết giữa chừng là mất tin → ghi **checkpoint trước**, xoá file pending sau; flush bỏ qua (và dọn)
+   record đã có trong checkpoint.
+4. `c24dc09` — **eb-client**: mọi `4xx` bị coi là từ chối vĩnh viễn ⇒ `429` (giới hạn tần suất) và
+   `408` (timeout server) âm thầm vứt bỏ tin → `408`/`429` **retryable** (nhãn
+   `post_failed_retryable_4xx:<status>`), `4xx` còn lại vẫn vào `pending/rejected/` **vĩnh viễn**.
+5. `3168f22` — **flush**: `updateStatus` quét lại `pending/` sau **mỗi** record ⇒ chi phí O(N²)
+   (N=600 ≈ 29 s) → đo `pending`/`rejected` **một lần cho cả lượt flush**; đo trên máy review:
+   N=40 → 489 ms, N=80 → 998 ms (2,0×, tuyến tính; trước đó 3318 ms / 12472 ms, 3,8×).
+6. `c24c369` — **queue**: `checkpoint.json` phình vô hạn ⇒ giới hạn **2000 message id mỗi group**, bỏ
+   entry cũ nhất trước.
+7. `bc2b0b4` — **sdk**: `openclaw` là devDependency nên `npm install` đặt bản thật vào
+   `node_modules/openclaw`, che (shadow) SDK của host ⇒ plugin chạy trên SDK cũ sau khi gateway nâng cấp →
+   thêm `scripts/link-host-sdk.mjs` (script `link:host-sdk`) thay thư mục đó bằng junction/symlink trỏ
+   tới bản cài của host; **phải chạy lại sau mỗi `npm install`**.
+8. `c69e03e` — **test**: test capture chỉ assert queue rỗng (thỏa mãn cả khi tap không làm gì) và dùng
+   sleep cố định → test đếm **request thật** server nhận (đúng 1), parse body assert đủ 6 field, chờ có
+   deadline 5 s thay cho sleep cố định.
