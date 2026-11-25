@@ -208,6 +208,8 @@ Mọi field đều **optional**; giá trị sai kiểu rơi về default chứ k
 
 ## Cài đặt
 
+> **Cài trên máy chủ Linux?** Xem [docs/deploy-linux.md](docs/deploy-linux.md) — có systemd service, đăng nhập Zalo bằng QR khi không có màn hình, và các bẫy riêng của Linux (nvm làm hỏng symlink SDK, `/tmp` bị dọn…).
+
 Thứ tự **bắt buộc** — làm đúng theo thứ tự dưới đây:
 
 ```bash
