@@ -19,7 +19,10 @@
   `\tif (isGroup && requireMention && !canDetectMention && !mentionDecision.effectiveWasMentioned) {`
 - Tên file chứa `processMessage` **không cố định** → script patch phải dò file theo nội dung.
 - Tất cả `import` của file vendor nằm ở đầu file, mỗi import một dòng, cột 0.
-- `resolveZalouserMessageSid` đã được import sẵn trong file monitor (alias `o`).
+- `resolveZalouserMessageSid` đã được import sẵn trong file monitor, dưới **tên thật**:
+  `import { …, o as resolveZalouserMessageSid, … } from "./channel-*.js"` — `o` là **tên export** phía
+  `channel-*.js` (`resolveZalouserMessageSid as o`), còn binding cục bộ trong file monitor là
+  `resolveZalouserMessageSid`.
 - `config` trong `processMessage` là **root OpenClawConfig** (đã xác nhận qua `config.channels?.zalouser`).
 - `defineBundledChannelEntry` chỉ load được module **bên trong thư mục chứa entry** (boundary root = `dirname(importMetaUrl)`) → entry và code vendor phải cùng nằm trong `dist/`.
 - `openclaw.extensions` và `openclaw.runtimeExtensions` phải **cùng độ dài** (song song 1-1).
@@ -47,6 +50,7 @@
 | `src/*.test.ts` | unit test (chạy trên JS đã build) |
 | `vendor/zalouser/**` | bản `@openclaw/zalouser` đã patch, commit vào repo |
 | `scripts/vendor-refresh.mjs` | copy bản npm mới từ `node_modules` → patch → swap vào `vendor/zalo-monitor` |
+| `scripts/clean-dist.mjs` | xoá `dist/` trước khi build (tsc không tự dọn) |
 | `scripts/copy-vendor.mjs` | copy `vendor/zalouser/dist` → `dist/zalouser` (build) |
 
 ---
@@ -69,13 +73,15 @@
   "type": "module",
   "description": "OpenClaw Zalo Personal fork that captures every Zalo group message (including untagged ones) and forwards it verbatim to a backend.",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
-    "test": "npm run build && node --test dist/",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json && node scripts/copy-vendor.mjs",
+    "test": "npm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "vendor:refresh": "node scripts/vendor-refresh.mjs"
   },
   "dependencies": {
-    "zca-js": "2.1.2"
+    "zca-js": "2.1.2",
+    "typebox": "1.1.38",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@openclaw/zalouser": "2026.5.28",
@@ -123,11 +129,25 @@
         "groupModel": "hybrid",
         "groupAllowFromFallbackToAllowFrom": false,
         "warnOnEmptyGroupSenderAllowlist": false
-      }
+      },
+      "preferOver": [
+        "zalouser"
+      ]
     }
   }
 }
 ```
+
+> **Ghi chú (sửa sau code review Task 1):**
+> - `typebox` + `zod` là dependency **bắt buộc**: code vendor import tĩnh chúng
+>   (`dist/shared-*.js` → `zod`, `dist/api-*.js` → `typebox`). Vendor copy không mang
+>   `node_modules` theo → phải khai báo ở package của ta, đúng version upstream.
+> - `node --test dist/` **hỏng** trên Node 22 (Node thử `require()` chính thư mục →
+>   `MODULE_NOT_FOUND`). Phải dùng glob `node --test "dist/**/*.test.js"`. Glob cũng an toàn
+>   hơn: `dist/` sẽ chứa ~20 file vendor, tuyệt đối không được chạy như test.
+> - `openclaw.channel.preferOver: ["zalouser"]` khai báo quyền ưu tiên của plugin id
+>   `zalo-monitor` so với plugin npm `zalouser` ngay từ Task 1 (manifest Task 10 vẫn là
+>   nguồn ưu tiên chính: `existing.preferOver ?? packageChannel.preferOver`).
 
 - [ ] **Step 2: Tạo `tsconfig.json`**
 
@@ -241,7 +261,7 @@ Expected: FAIL — `Cannot find module './state.js'`.
 
 ```ts
 // src/state.ts
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "openclaw/plugin-sdk/state-paths";
 
@@ -278,9 +298,9 @@ export async function writeJsonAtomic(filePath: string, value: unknown): Promise
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
     await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    await rename(tmp, filePath);
+    await renameWithRetry(tmp, filePath);
   } catch (err) {
-    await import("node:fs/promises").then((fs) => fs.rm(tmp, { force: true }));
+    await rm(tmp, { force: true });
     throw err;
   }
 }
@@ -294,7 +314,41 @@ export async function readJsonIfExists<T>(filePath: string): Promise<T | null> {
     return null;
   }
 }
+
+const RENAME_MAX_ATTEMPTS = 5;
+const RENAME_RETRY_DELAYS_MS = [10, 25, 50, 100];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
+}
+
+/** Windows hay trả EPERM khi target đang bị tranh chấp — thử lại vài lần rồi mới bỏ. */
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < RENAME_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") throw err;
+      lastError = err;
+      const delay = RENAME_RETRY_DELAYS_MS[attempt] ?? RENAME_RETRY_DELAYS_MS[RENAME_RETRY_DELAYS_MS.length - 1] ?? 100;
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 ```
+
+> **Sửa sau code review Task 2:** `rename` phải retry `EPERM`/`EBUSY`/`EACCES` — đo thật trên
+> Windows: 8 writer đồng thời cùng target → **4 fail `EPERM`**; 8 writer khác target → 8/8 OK.
+> `checkpoint.json` / `status.json` là singleton read-modify-write nên sẽ chập chờn nếu không retry.
+> Lỗi không tạm thời (`ENOTEMPTY`, `ENOENT`…) phải ném ngay, không retry.
+> Test phải **chốt tên thư mục literal** (`pending/`, `pending/rejected/`) — test cũ dùng resolver
+> cho cả lúc tạo lẫi lúc assert nên đổi tên resolver vẫn xanh.
+> Phải có test cho **error path**: rename fail (target là thư mục non-empty) → error ném ra và
+> **không còn file `.tmp-`**.
 
 - [ ] **Step 4: Chạy test để thấy pass**
 
@@ -637,8 +691,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+/** setTimeout/AbortSignal.timeout tràn quá 2^31-1 ms sẽ fire sau ~1ms → timeout dài biến thành timeout tức thì. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 export async function postCaptureToBackend(config: EbClientConfig, payload: BackendPayload): Promise<PostOutcome> {
   const attempts = Math.max(1, config.maxAttempts);
+  const timeoutMs = Math.min(Math.max(1, config.timeoutMs), MAX_TIMEOUT_MS);
   let lastError = "post_failed_unknown";
   let lastStatus: number | null = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -647,7 +705,7 @@ export async function postCaptureToBackend(config: EbClientConfig, payload: Back
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(config.timeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       lastStatus = response.status;
       if (response.status >= 200 && response.status < 300) {
@@ -868,7 +926,12 @@ export async function listPendingRecords(stateDir: string): Promise<PendingRecor
 }
 
 export async function readCheckpoint(stateDir: string): Promise<Checkpoint> {
-  return (await readJsonIfExists<Checkpoint>(resolveCheckpointPath(stateDir))) ?? {};
+  const raw = await readJsonIfExists<unknown>(resolveCheckpointPath(stateDir));
+  // JSON hợp lệ nhưng sai shape (mảng, chuỗi…) → coi như chưa có checkpoint.
+  // Nếu không, markCheckpoint sẽ gắn key lên mảng và JSON.stringify sẽ **drop** mọi entry
+  // → gửi trùng tin đã nhận.
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return raw as Checkpoint;
 }
 
 export async function isCaptured(stateDir: string, groupId: string, messageId: string): Promise<boolean> {
@@ -897,17 +960,17 @@ export async function countRejected(stateDir: string): Promise<number> {
 }
 
 export async function readStatus(stateDir: string): Promise<CaptureStatus> {
-  const stored = await readJsonIfExists<CaptureStatus>(resolveStatusPath(stateDir));
-  return (
-    stored ?? {
-      pending: 0,
-      rejected: 0,
-      lastPostAt: null,
-      lastPostStatus: null,
-      lastError: null,
-      updatedAt: new Date().toISOString(),
-    }
-  );
+  const stored = await readJsonIfExists<unknown>(resolveStatusPath(stateDir));
+  const fallback: CaptureStatus = {
+    pending: 0,
+    rejected: 0,
+    lastPostAt: null,
+    lastPostStatus: null,
+    lastError: null,
+    updatedAt: new Date().toISOString(),
+  };
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return fallback;
+  return { ...fallback, ...(stored as Partial<CaptureStatus>) };
 }
 
 export async function updateStatus(stateDir: string, patch: Partial<CaptureStatus>): Promise<void> {
@@ -1276,7 +1339,7 @@ const TAP_CALL = [
   "\t\tgroupName,",
   "\t\tsenderId,",
   "\t\tsenderName,",
-  "\t\trawBody,",
+  "\t\trawBody: message.content,",
   "\t\tmentioned: mentionDecision.effectiveWasMentioned,",
   "\t\tmessageId: resolveZalouserMessageSid({ msgId: message.msgId, cliMsgId: message.cliMsgId, fallback: String(message.timestampMs) }),",
   "\t\trootConfig: config",
@@ -1348,17 +1411,9 @@ async function main() {
 
   const staged = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-vendor-"));
   try {
-    await mkdir(path.join(staged, "dist"), { recursive: true });
-    for (const entry of entries) {
-      const from = path.join(sourceDist, entry);
-      const to = path.join(staged, "dist", entry);
-      if (entry === monitorFile) {
-        const patched = patchMonitorSource(await readFile(from, "utf8"));
-        await writeFile(to, patched, "utf8");
-      } else {
-        await cp(from, to);
-      }
-    }
+    await cp(sourceDist, path.join(staged, "dist"), { recursive: true });
+    const patched = patchMonitorSource(await readFile(path.join(staged, "dist", monitorFile), "utf8"));
+    await writeFile(path.join(staged, "dist", monitorFile), patched, "utf8");
     await cp(path.join(sourceDir, "openclaw.plugin.json"), path.join(staged, "openclaw.plugin.json"));
     await cp(path.join(sourceDir, "package.json"), path.join(staged, "package.json"));
 
@@ -1410,17 +1465,35 @@ git commit -m "feat(vendor): vendor patched zalouser channel with capture tap"
 
 ---
 
-### Task 10: `scripts/copy-vendor.mjs` + `openclaw.plugin.json`
+### Task 10: `scripts/copy-vendor.mjs` + `scripts/clean-dist.mjs` + `openclaw.plugin.json`
 
 **Files:**
+- Create: `scripts/clean-dist.mjs`
 - Create: `scripts/copy-vendor.mjs`
 - Create: `openclaw.plugin.json`
 
-- [ ] **Step 1: Viết `scripts/copy-vendor.mjs`**
+- [ ] **Step 1: Viết `scripts/clean-dist.mjs`**
+
+```js
+// scripts/clean-dist.mjs
+import { rm } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+await rm(path.join(repoRoot, "dist"), { recursive: true, force: true });
+console.log("[clean-dist] đã xoá dist/");
+```
+
+> `tsc` không tự dọn `dist/`, nên output cũ của file đã đổi tên/xoá có thể sót lại và bị
+> entry discovery quét nhầm. `clean-dist` chạy **trước** `tsc`; `copy-vendor` chạy **sau**
+> `tsc` (nếu đảo thứ tự thì copy sẽ xoá luôn output của compiler).
+
+- [ ] **Step 2: Viết `scripts/copy-vendor.mjs`**
 
 ```js
 // scripts/copy-vendor.mjs
-import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1428,16 +1501,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const vendorDist = path.join(repoRoot, "vendor", "zalouser", "dist");
 const outDir = path.join(repoRoot, "dist", "zalouser");
 
-const entries = (await readdir(vendorDist)).filter((entry) => entry.endsWith(".js"));
-await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
-for (const entry of entries) {
-  await cp(path.join(vendorDist, entry), path.join(outDir, entry));
-}
-console.log(`[copy-vendor] đã copy ${entries.length} file vendor → dist/zalouser`);
+await cp(vendorDist, outDir, { recursive: true });
+const copied = (await readdir(outDir)).length;
+console.log(`[copy-vendor] đã copy vendor → dist/zalouser (${copied} entry cấp cao nhất)`);
 ```
 
-- [ ] **Step 2: Tạo `openclaw.plugin.json`**
+- [ ] **Step 3: Tạo `openclaw.plugin.json`**
 
 ```json
 {
@@ -1516,7 +1586,7 @@ console.log(`[copy-vendor] đã copy ${entries.length} file vendor → dist/zalo
 
 > `channelConfigs.zalouser.schema` ở trên là placeholder rỗng; `vendor-refresh.mjs` (Task 9) sẽ điền schema thật của channel `zalouser`. Sau Task 9 phải chạy lại `node scripts/vendor-refresh.mjs` để schema được đồng bộ.
 
-- [ ] **Step 3: Đồng bộ schema channel từ bản vendor**
+- [ ] **Step 4: Đồng bộ schema channel từ bản vendor**
 
 Run: `node scripts/vendor-refresh.mjs`
 Expected: in `đã đồng bộ channelConfigs.zalouser.schema`.
@@ -1524,15 +1594,15 @@ Expected: in `đã đồng bộ channelConfigs.zalouser.schema`.
 Run: `node -e "const m=require('./openclaw.plugin.json'); console.log(Object.keys(m.channelConfigs.zalouser.schema.properties||{}).join(','))"`
 Expected: in ra danh sách property của channel zalouser (ví dụ `name,enabled,markdown,profile,dmPolicy,allowFrom,historyLimit,groupAllowFrom,groupPolicy,groups`).
 
-- [ ] **Step 4: Build thử**
+- [ ] **Step 5: Build thử**
 
 Run: `npm run build`
 Expected: `tsc` không lỗi; `[copy-vendor] đã copy N file vendor → dist/zalouser`; `dist/index.js`, `dist/zalouser/monitor-*.js` tồn tại.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/copy-vendor.mjs openclaw.plugin.json
+git add scripts/clean-dist.mjs scripts/copy-vendor.mjs openclaw.plugin.json
 git commit -m "feat(manifest): add zalo-monitor manifest and vendor copy step"
 ```
 
@@ -1605,15 +1675,21 @@ import { resolvePluginStateDir } from "./state.js";
 
 const logger = createSubsystemLogger("zalo-monitor");
 
+let started = false;
 let timer: NodeJS.Timeout | null = null;
 
 /**
  * Timer flush + replay khi khởi động.
  * Settings lấy từ `getLastCaptureSettings()` — tức là settings resolve gần nhất
  * từ root config (qua tap). Trước khi có tin nào, dùng default.
+ *
+ * Timer tự hẹn lại sau mỗi lần chạy (thay vì setInterval cố định) để
+ * `flushIntervalMs` do user cấu hình có hiệu lực ngay khi có tin đầu tiên —
+ * lúc đó `lastSettings` mới được cập nhật.
  */
 export function startCaptureRuntime(): void {
-  if (timer) return;
+  if (started) return;
+  started = true;
   const stateDir = resolvePluginStateDir();
   void (async () => {
     try {
@@ -1626,12 +1702,19 @@ export function startCaptureRuntime(): void {
       logger.error("capture_replay_failed", { error: err instanceof Error ? err.message : String(err) });
     }
   })();
-  timer = setInterval(() => {
-    void flushPending(stateDir, getLastCaptureSettings()).catch((err) => {
-      logger.error("capture_flush_failed", { error: err instanceof Error ? err.message : String(err) });
-    });
-  }, getLastCaptureSettings().flushIntervalMs);
-  timer.unref?.();
+  const scheduleNext = () => {
+    timer = setTimeout(() => {
+      void flushPending(stateDir, getLastCaptureSettings())
+        .catch((err) => {
+          logger.error("capture_flush_failed", { error: err instanceof Error ? err.message : String(err) });
+        })
+        .finally(() => {
+          scheduleNext();
+        });
+    }, getLastCaptureSettings().flushIntervalMs);
+    timer.unref?.();
+  };
+  scheduleNext();
 }
 ```
 
@@ -1880,4 +1963,43 @@ git commit -m "docs: document fork install, config, state and upgrade flow"
 
 **Type consistency** — `BackendPayload` (normalize.ts) dùng bởi queue.ts, eb-client.ts ✓; `PendingRecord extends BackendPayload` ✓; `CaptureSettings` (config.ts) dùng bởi capture.ts, runtime.ts ✓; `EbClientConfig` (eb-client.ts) dùng bởi flush.ts ✓ — `CaptureSettings` có `captureDm`/`flushIntervalMs` **thừa** so với `EbClientConfig` nhưng cấu trúc tương thích (structural typing) nên truyền `settings` vào `flushPending(stateDir, settings)` hợp lệ ✓. `captureZaloMessage` nhận `rootConfig` — Task 9 truyền `rootConfig: config` ✓ khớp tên field. `getLastCaptureSettings()` (capture.ts) được runtime.ts dùng ✓.
 
-**Thứ tự build** — `npm run build` = `tsc` (src → dist) **rồi** `copy-vendor.mjs` (vendor/zalouser/dist → dist/zalouser). File monitor đã patch import `"../capture.js"` → resolve thành `dist/capture.js` ✓ (cùng nằm trong `dist/`, thoả boundary root của `defineBundledChannelEntry`).
+**Thứ tự build** — `npm run build` = `clean-dist.mjs` (xoá `dist/`) → `tsc` (src → dist) → `copy-vendor.mjs` (vendor/zalouser/dist → dist/zalouser). File monitor đã patch import `"../capture.js"` → resolve thành `dist/capture.js` ✓ (cùng nằm trong `dist/`, thoả boundary root của `defineBundledChannelEntry`).
+
+**Sửa đổi sau code review Task 1** (đã áp dụng vào plan này):
+1. `dependencies` thêm `typebox@1.1.38` + `zod@4.4.3` — code vendor import tĩnh chúng, vendor copy không mang `node_modules` theo.
+2. `test` script: `node --test dist/` → `node --test "dist/**/*.test.js"` (bản thư mục hỏng trên Node 22; glob cũng loại trừ file vendor).
+3. `openclaw.channel` thêm `preferOver: ["zalouser"]` — khai báo quyền ưu tiên ngay từ Task 1.
+4. Task 9/10 copy vendor **đệ quy** thay vì chỉ copy file `.js` cấp cao nhất.
+5. Task 10 thêm `scripts/clean-dist.mjs` chạy trước `tsc`.
+
+---
+
+## Hardening sau implementation (vòng review cuối)
+
+Tám sửa đổi đã merge sau khi implementation xong — mỗi dòng là **vấn đề** → **thay đổi**:
+
+1. `f29d3eb` — **config/runtime**: replay backlog và timer lúc khởi động dùng `DEFAULT_CAPTURE_SETTINGS`
+   vì settings chỉ được nạp khi tin đầu tiên tới ⇒ backlog có thể bị POST nhầm sang backend khác →
+   tách `captureSettingsFromPluginConfig(pluginConfig)` ra `config.ts` và `startCaptureRuntime(api.pluginConfig)`
+   nạp config của plugin **trước** replay + trước khi hẹn timer.
+2. `94f0c2b` — **queue**: id file pending chứa timestamp ⇒ capture lại cùng một tin tạo file thứ hai,
+   giao trùng lên backend → `buildRecordId(groupId, messageId)` = 32 ký tự hex SHA-1 trên
+   `groupId\0messageId`, **không timestamp** ⇒ capture lại ghi đè đúng file cũ.
+3. `4df948e` — **queue/flush**: `markDelivered` xoá file pending **trước** rồi mới ghi checkpoint ⇒
+   chết giữa chừng là mất tin → ghi **checkpoint trước**, xoá file pending sau; flush bỏ qua (và dọn)
+   record đã có trong checkpoint.
+4. `c24dc09` — **eb-client**: mọi `4xx` bị coi là từ chối vĩnh viễn ⇒ `429` (giới hạn tần suất) và
+   `408` (timeout server) âm thầm vứt bỏ tin → `408`/`429` **retryable** (nhãn
+   `post_failed_retryable_4xx:<status>`), `4xx` còn lại vẫn vào `pending/rejected/` **vĩnh viễn**.
+5. `3168f22` — **flush**: `updateStatus` quét lại `pending/` sau **mỗi** record ⇒ chi phí O(N²)
+   (N=600 ≈ 29 s) → đo `pending`/`rejected` **một lần cho cả lượt flush**; đo trên máy review:
+   N=40 → 489 ms, N=80 → 998 ms (2,0×, tuyến tính; trước đó 3318 ms / 12472 ms, 3,8×).
+6. `c24c369` — **queue**: `checkpoint.json` phình vô hạn ⇒ giới hạn **2000 message id mỗi group**, bỏ
+   entry cũ nhất trước.
+7. `bc2b0b4` — **sdk**: `openclaw` là devDependency nên `npm install` đặt bản thật vào
+   `node_modules/openclaw`, che (shadow) SDK của host ⇒ plugin chạy trên SDK cũ sau khi gateway nâng cấp →
+   thêm `scripts/link-host-sdk.mjs` (script `link:host-sdk`) thay thư mục đó bằng junction/symlink trỏ
+   tới bản cài của host; **phải chạy lại sau mỗi `npm install`**.
+8. `c69e03e` — **test**: test capture chỉ assert queue rỗng (thỏa mãn cả khi tap không làm gì) và dùng
+   sleep cố định → test đếm **request thật** server nhận (đúng 1), parse body assert đủ 6 field, chờ có
+   deadline 5 s thay cho sleep cố định.
