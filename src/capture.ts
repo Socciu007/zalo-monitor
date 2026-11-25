@@ -65,7 +65,7 @@ async function handleCapture(stateDir: string, settings: CaptureSettings, input:
       senderName: input.senderName,
     });
     const record: PendingRecord = {
-      id: buildRecordId(input.messageId, receivedAt),
+      id: buildRecordId(input.chatId, input.messageId),
       messageId: input.messageId,
       ...payload,
       mentioned: input.mentioned,

@@ -36,13 +36,15 @@ export interface CaptureStatus {
 }
 
 /**
- * Id ổn định cho file pending: tiền tố timestamp + 12 ký tự hex SHA-1 của messageId.
- * Id luôn an toàn cho filesystem (messageId có thể chứa `/`, `:` hoặc ký tự lạ).
+ * Id ổn định cho file pending: 32 ký tự hex SHA-1 của `(groupId, messageId)`.
+ *
+ * Id không phụ thuộc thời điểm capture → capture lại cùng một tin sẽ ghi đè
+ * đúng file cũ thay vì tạo thêm file thứ hai (tránh gửi trùng lên backend).
+ * Id chỉ gồm ký tự hex nên luôn an toàn cho filesystem (messageId có thể chứa
+ * `/`, `:` hoặc ký tự lạ).
  */
-export function buildRecordId(messageId: string, receivedAt: string): string {
-  const stamp = receivedAt.replace(/[^0-9]/g, "");
-  const digest = createHash("sha1").update(messageId).digest("hex").slice(0, 12);
-  return `${stamp}-${digest}`;
+export function buildRecordId(groupId: string, messageId: string): string {
+  return createHash("sha1").update(`${groupId}\u0000${messageId}`).digest("hex").slice(0, 32);
 }
 
 /** Chỉ giữ đúng 6 field backend mong đợi. */

@@ -17,7 +17,7 @@ import {
 
 function makeRecord(overrides: Partial<PendingRecord> = {}): PendingRecord {
   return {
-    id: buildRecordId("msg-1", "2026-11-24T10:00:00.000Z"),
+    id: buildRecordId("g1", "msg-1"),
     messageId: "msg-1",
     platform: "zalo",
     content: "xin chào",
@@ -79,10 +79,29 @@ test("toBackendPayload chỉ giữ 6 field", () => {
   assert.deepEqual(Object.keys(payload).sort(), ["content", "groupId", "groupName", "platform", "senderName", "userId"]);
 });
 
-test("buildRecordId ổn định và không chứa ký tự lạ", () => {
-  const id = buildRecordId("msg/with:weird chars", "2026-11-24T10:00:00.000Z");
-  assert.match(id, /^[0-9]+-[0-9a-f]{12}$/);
-  assert.equal(id, buildRecordId("msg/with:weird chars", "2026-11-24T10:00:00.000Z"));
+test("buildRecordId chỉ gồm 32 ký tự hex, ổn định theo (groupId, messageId)", () => {
+  const id = buildRecordId("g1", "msg/with:weird chars");
+  assert.match(id, /^[0-9a-f]{32}$/);
+  // Cùng (groupId, messageId) → cùng id, không phụ thuộc thời điểm capture.
+  assert.equal(id, buildRecordId("g1", "msg/with:weird chars"));
+  // Khác group hoặc khác message → khác id.
+  assert.notEqual(id, buildRecordId("g2", "msg/with:weird chars"));
+  assert.notEqual(id, buildRecordId("g1", "msg/with:weird char"));
+});
+
+test("capture lại cùng (groupId, messageId) chỉ tạo một file pending", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-queue-"));
+  const first = makeRecord({ receivedAt: "2026-11-24T10:00:00.000Z" });
+  const second = makeRecord({ receivedAt: "2026-11-24T10:00:05.000Z" });
+  assert.equal(first.id, second.id);
+  await enqueueCapture(dir, first);
+  await enqueueCapture(dir, second);
+  const records = await listPendingRecords(dir);
+  assert.equal(records.length, 1);
+  assert.match(records[0]?.id ?? "", /^[0-9a-f]{32}$/);
+  const files = (await readdir(path.join(dir, "pending"))).filter((entry) => entry.endsWith(".json"));
+  assert.equal(files.length, 1);
+  assert.equal(files[0], `${first.id}.json`);
 });
 
 test("checkpoint hỏng dạng mảng → coi như chưa có checkpoint, không throw", async () => {

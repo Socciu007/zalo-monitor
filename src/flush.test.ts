@@ -10,7 +10,7 @@ import { buildRecordId, enqueueCapture, listPendingRecords, type PendingRecord }
 
 function makeRecord(id: string, receivedAt: string): PendingRecord {
   return {
-    id: buildRecordId(id, receivedAt),
+    id: buildRecordId("g1", id),
     messageId: id,
     platform: "zalo",
     content: `nội dung ${id}`,
