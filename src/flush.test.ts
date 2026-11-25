@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -49,4 +49,31 @@ test("flushPending dừng khi backend lỗi mạng và giữ pending", async () 
   await enqueueCapture(dir, makeRecord("m1", "2026-11-24T10:00:00.000Z"));
   await flushPending(dir, { backendUrl: "http://127.0.0.1:1/none", timeoutMs: 500, maxAttempts: 1, retryDelaysMs: [] });
   assert.equal((await listPendingRecords(dir)).length, 1);
+});
+
+test("flushPending bỏ qua record đã giao trước đó và dọn file pending sót lại", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-flush-"));
+  const record = makeRecord("m1", "2026-11-24T10:00:00.000Z");
+  // Tin đã được giao trước đó (đã có checkpoint) nhưng file pending còn sót lại.
+  await writeFile(
+    path.join(dir, "checkpoint.json"),
+    JSON.stringify({ g1: { m1: { at: "2026-11-24T10:00:00.000Z" } } }),
+    "utf8",
+  );
+  await enqueueCapture(dir, record);
+  let calls = 0;
+  const server = http.createServer((req, res) => {
+    calls += 1;
+    res.writeHead(200);
+    res.end("{}");
+  });
+  await new Promise<void>((resolve) => { server.listen(0, "127.0.0.1", resolve); });
+  const { port } = server.address() as AddressInfo;
+  try {
+    await flushPending(dir, { backendUrl: `http://127.0.0.1:${port}/x`, timeoutMs: 2000, maxAttempts: 2, retryDelaysMs: [1, 1] });
+  } finally {
+    await new Promise<void>((resolve) => { server.close(() => resolve()); });
+  }
+  assert.equal(calls, 0, "tin đã có checkpoint không được gửi lại");
+  assert.equal((await listPendingRecords(dir)).length, 0, "file pending sót lại phải bị dọn");
 });

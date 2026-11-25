@@ -1,6 +1,6 @@
 import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
 import { postCaptureToBackend, type EbClientConfig } from "./eb-client.js";
-import { listPendingRecords, markDelivered, markRejected, toBackendPayload, updateStatus } from "./queue.js";
+import { isCaptured, listPendingRecords, markDelivered, markRejected, removePendingRecord, toBackendPayload, updateStatus } from "./queue.js";
 
 const logger = createSubsystemLogger("zalo-monitor");
 
@@ -21,6 +21,12 @@ export function flushPending(stateDir: string, config: EbClientConfig): Promise<
 async function runFlush(stateDir: string, config: EbClientConfig): Promise<void> {
   const records = await listPendingRecords(stateDir);
   for (const record of records) {
+    // Tin đã có checkpoint nghĩa là đã giao thành công trước đó; file pending còn
+    // sót lại (crash giữa lúc ghi checkpoint và lúc xoá file) → dọn đi, không gửi lại.
+    if (await isCaptured(stateDir, record.groupId, record.messageId)) {
+      await removePendingRecord(stateDir, record);
+      continue;
+    }
     const outcome = await postCaptureToBackend(config, toBackendPayload(record));
     if (outcome.kind === "delivered") {
       await markDelivered(stateDir, record, outcome.status);

@@ -155,12 +155,24 @@ export async function updateStatus(stateDir: string, patch: Partial<CaptureStatu
 }
 
 /**
- * Backend đã nhận (2xx): xoá file pending TRƯỚC, rồi ghi checkpoint.
- * Nếu chết giữa chừng thì tin chưa được checkpoint sẽ được gửi lại — an toàn hơn là mất tin.
+ * Xoá file pending mà không đụng tới checkpoint.
+ * Dùng khi phát hiện tin đã được giao trước đó (file pending bị sót lại sau crash).
+ */
+export async function removePendingRecord(stateDir: string, record: PendingRecord): Promise<void> {
+  await rm(path.join(resolvePendingDir(stateDir), `${record.id}.json`), { force: true });
+}
+
+/**
+ * Backend đã nhận (2xx): ghi checkpoint TRƯỚC, rồi mới xoá file pending.
+ *
+ * Đảm bảo at-least-once — không mất tin. Nếu tiến trình chết sau khi backend
+ * trả 2xx nhưng trước khi ghi checkpoint, record vẫn nằm trong `pending/` và sẽ
+ * được giao lại (backend phải chịu được duplicate). Xoá file trước rồi chết thì
+ * tin đó mất hẳn, vì zca-js không bảo đảm giao lại tin đã gửi.
  */
 export async function markDelivered(stateDir: string, record: PendingRecord, status: number): Promise<void> {
-  await rm(path.join(resolvePendingDir(stateDir), `${record.id}.json`), { force: true });
   await markCheckpoint(stateDir, record);
+  await removePendingRecord(stateDir, record);
   await updateStatus(stateDir, { lastPostAt: new Date().toISOString(), lastPostStatus: status, lastError: null });
 }
 

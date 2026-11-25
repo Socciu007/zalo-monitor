@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -112,4 +112,15 @@ test("checkpoint hỏng dạng mảng → coi như chưa có checkpoint, không 
   await enqueueCapture(dir, record);
   await markDelivered(dir, record, 201);
   assert.equal(await isCaptured(dir, "g1", "msg-1"), true);
+});
+
+test("markDelivered ghi checkpoint trước rồi mới xoá file pending — crash giữa chừng không mất tin", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "zalo-monitor-queue-"));
+  const record = makeRecord();
+  await enqueueCapture(dir, record);
+  // checkpoint.json là thư mục → bước ghi checkpoint chắc chắn fail.
+  await mkdir(path.join(dir, "checkpoint.json"));
+  await assert.rejects(() => markDelivered(dir, record, 201));
+  // File pending phải còn nguyên để lần flush sau giao lại được.
+  assert.equal((await listPendingRecords(dir)).length, 1);
 });
