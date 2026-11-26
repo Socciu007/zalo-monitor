@@ -10,7 +10,7 @@ export interface CaptureSettings {
 
 /** Giá trị dùng khi config vắng mặt hoặc sai kiểu — không bao giờ throw. */
 export const DEFAULT_CAPTURE_SETTINGS: CaptureSettings = {
-  backendUrl: "http://localhost:3001/clientV2/sdAnalysis/analyzeAndSaveSdData",
+  backendUrl: "https://www.dadaex.cn/api/clientV2/sdAnalysis/analyzeAndSaveSdData",
   timeoutMs: 10_000,
   maxAttempts: 4,
   retryDelaysMs: [1_000, 4_000, 16_000],
